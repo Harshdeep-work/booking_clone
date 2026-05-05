@@ -1,0 +1,134 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Event {
+  id        String   @id @default(uuid())
+  name      String
+  date      DateTime
+  venue     String
+  city      String
+  imageUrl  String?
+  layouts   Layout[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Layout {
+  id        String    @id @default(uuid())
+  event     Event     @relation(fields: [eventId], references: [id])
+  eventId   String
+  version   Int       @default(1)
+  name      String
+  isActive  Boolean   @default(false)
+  sections  Section[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([eventId, version])
+}
+
+model Section {
+  id          String        @id @default(uuid())
+  layout      Layout        @relation(fields: [layoutId], references: [id])
+  layoutId    String
+  section_id  String        @unique
+  label       String
+  category    SeatCategory  @default(GENERAL)
+  color       String        @default("#4A90E2")
+  geometry    Json          // GeoJSON Polygon
+  centerX     Float         @default(0)
+  centerY     Float         @default(0)
+  level       String?       // 100/200/300/SUITE/CLUB
+  curveRadius Float?        // For curved sections
+  photoUrl    String?       // Seat view photo
+  isAccessible Boolean      @default(false)
+  isObstructed Boolean      @default(false)
+  seats       Seat[]
+  rules       PricingRule[]
+  createdAt   DateTime      @default(now())
+
+  @@index([layoutId])
+  @@index([category])
+}
+
+model Seat {
+  id         String      @id @default(uuid())
+  seat_id    String      @unique // e.g. "A101-R1-S1"
+  section    Section     @relation(fields: [sectionId], references: [id])
+  sectionId  String
+  row        String
+  number     Int
+  x          Float       // Canvas/map X coordinate
+  y          Float       // Canvas/map Y coordinate
+  lng        Float       @default(0) // Mapbox longitude
+  lat        Float       @default(0) // Mapbox latitude
+  geometry   Json?       // Optional GeoJSON Point
+  price      Decimal     @db.Decimal(10, 2)
+  status     SeatStatus  @default(AVAILABLE)
+  isAccessible Boolean   @default(false)
+  isCompanion  Boolean   @default(false)
+  isObstructed Boolean   @default(false)
+  isVIP        Boolean   @default(false)
+  aisleGap     Boolean   @default(false)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@index([sectionId])
+  @@index([status])
+  @@index([sectionId, status])
+}
+
+model PricingRule {
+  id                String   @id @default(uuid())
+  section           Section  @relation(fields: [sectionId], references: [id])
+  sectionId         String   @unique
+  base_price        Decimal  @db.Decimal(10, 2)
+  demand_multiplier Float    @default(1.0)  // 1.0 - 3.0
+  time_factor       Float    @default(1.0)  // Rises near event date
+  min_price         Decimal  @db.Decimal(10, 2)
+  max_price         Decimal  @db.Decimal(10, 2)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Order {
+  id        String      @id @default(uuid())
+  userId    String
+  seatIds   Json        // Array of seat_ids
+  total     Decimal     @db.Decimal(10, 2)
+  status    OrderStatus @default(PENDING)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([userId])
+}
+
+enum SeatStatus {
+  AVAILABLE
+  LOCKED
+  SOLD
+  OBSTRUCTED
+}
+
+enum SeatCategory {
+  FIELD
+  PLATINUM
+  GOLD
+  SILVER
+  BRONZE
+  GENERAL
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
