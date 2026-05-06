@@ -57,14 +57,14 @@ function makeLabelSprite(text: string, price: number): THREE.Sprite {
 
 export default function ThreeViewer({ className }: { className?: string }) {
   const mountRef   = useRef<HTMLDivElement>(null);
-  const sceneRef   = useRef<THREE.Scene>();
-  const rendRef    = useRef<THREE.WebGLRenderer>();
-  const camRef     = useRef<THREE.OrthographicCamera>();
-  const rafRef     = useRef<number>();
-  const instRef    = useRef<THREE.InstancedMesh>();   // seats
+  const sceneRef   = useRef<THREE.Scene | undefined>(undefined);
+  const rendRef    = useRef<THREE.WebGLRenderer | undefined>(undefined);
+  const camRef     = useRef<THREE.OrthographicCamera | undefined>(undefined);
+  const rafRef     = useRef<number | undefined>(undefined);
+  const instRef    = useRef<THREE.InstancedMesh | undefined>(undefined);   // seats
   const seatData   = useRef<MockSeat[]>([]);          // parallel array to instance indices
-  const labelGroup = useRef<THREE.Group>();
-  const sectionGrp = useRef<THREE.Group>();
+  const labelGroup = useRef<THREE.Group | undefined>(undefined);
+  const sectionGrp = useRef<THREE.Group | undefined>(undefined);
 
   // pan/zoom state
   const isDragging = useRef(false);

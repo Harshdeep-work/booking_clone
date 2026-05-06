@@ -50,9 +50,9 @@ export default function StadiumViewer({ className }: { className?: string }) {
   const camRef    = useRef<THREE.OrthographicCamera | undefined>(undefined);
   const sceneRef  = useRef<THREE.Scene | undefined>(undefined);
   const rafRef    = useRef<number | undefined>(undefined);
-  const instRef   = useRef<THREE.InstancedMesh>();
+  const instRef   = useRef<THREE.InstancedMesh | undefined>(undefined);
   const seatData  = useRef<StadiumSeat[]>([]);
-  const lblGrp    = useRef<THREE.Group>();
+  const lblGrp    = useRef<THREE.Group | undefined>(undefined);
   const secMeshes = useRef<Map<string, THREE.Mesh>>(new Map());
 
   const isDragging = useRef(false);
