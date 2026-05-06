@@ -45,10 +45,10 @@ export default function EnhancedPropertiesPanel({ selectedEntity, onUpdate, onUp
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, padding: 16 }}>
       {/* Basic Info */}
       <div>
-        <h3 style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', marginBottom: 12 }}>
-          {isShape && '🏟️ Section Properties'}
-          {isSeat && '🪑 Seat Properties'}
-          {isRow && '📏 Row Properties'}
+        <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)', marginBottom: 12 }}>
+          {isShape && 'Section Properties'}
+          {isSeat && 'Seat Properties'}
+          {isRow && 'Row Properties'}
         </h3>
 
         <div style={fieldGroup}>
@@ -286,18 +286,23 @@ export default function EnhancedPropertiesPanel({ selectedEntity, onUpdate, onUp
       <button
         onClick={() => onUpdate({ _delete: true })}
         style={{
-          padding: '10px 16px',
+          padding: '9px 16px',
           fontSize: 12,
           fontWeight: 600,
-          border: '1px solid #fca5a5',
+          border: '1px solid var(--border)',
           borderRadius: 8,
-          background: '#fef2f2',
+          background: 'var(--bg)',
           color: '#dc2626',
           cursor: 'pointer',
           marginTop: 8,
+          fontFamily: 'inherit',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
         }}
       >
-        🗑️ Delete {isShape ? 'Section' : isSeat ? 'Seat' : 'Row'}
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 3h9M5 3V2h3v1M4 3l.5 8h4L9 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        Delete {isShape ? 'Section' : isSeat ? 'Seat' : 'Row'}
       </button>
     </div>
   );
@@ -313,15 +318,15 @@ const fieldGroup: React.CSSProperties = {
 const label: React.CSSProperties = {
   fontSize: 11,
   fontWeight: 600,
-  color: '#475569',
+  color: 'var(--text-2)',
 };
 
 const input: React.CSSProperties = {
-  padding: '8px 10px',
+  padding: '7px 10px',
   fontSize: 12,
-  border: '1px solid #e2e8f0',
-  borderRadius: 6,
-  background: '#fff',
-  color: '#0f172a',
+  border: '1px solid var(--border)',
+  borderRadius: 8,
+  background: 'var(--bg)',
+  color: 'var(--text-1)',
   fontFamily: 'inherit',
 };

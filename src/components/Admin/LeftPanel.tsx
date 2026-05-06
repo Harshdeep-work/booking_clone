@@ -37,14 +37,14 @@ function ShapeGrid({ activeTool, onTool }: { activeTool: ToolId; onTool: (t: Too
             title={`${s.label} (${s.key})`}
             style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              gap: 3, padding: '8px 4px', borderRadius: 8, border: `1.5px solid ${active ? '#2563eb' : '#e2e8f0'}`,
-              background: active ? '#eff6ff' : '#fff',
-              color: active ? '#2563eb' : '#64748b',
-              cursor: 'pointer', transition: 'all 0.12s',
-              boxShadow: active ? '0 0 0 3px rgba(37,99,235,0.12)' : '0 1px 2px rgba(0,0,0,0.04)',
+              gap: 3, padding: '8px 4px', borderRadius: 8, border: `1.5px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+              background: active ? 'var(--accent-soft)' : 'var(--panel)',
+              color: active ? 'var(--accent)' : 'var(--text-2)',
+              cursor: 'pointer', transition: 'all 0.12s', fontFamily: 'inherit',
+              boxShadow: active ? '0 0 0 3px rgba(201,123,54,0.1)' : 'none',
             }}
-            onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#94a3b8'; (e.currentTarget as HTMLButtonElement).style.background = '#f8fafc'; } }}
-            onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#e2e8f0'; (e.currentTarget as HTMLButtonElement).style.background = '#fff'; } }}
+            onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--text-3)'; (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg)'; } }}
+            onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLButtonElement).style.background = 'var(--panel)'; } }}
           >
             <span style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {s.svg}
@@ -227,13 +227,13 @@ interface Props {
 }
 
 const SECTION_LABEL: React.CSSProperties = {
-  fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase',
+  fontSize: 9, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase',
   letterSpacing: 1, padding: '10px 12px 4px', display: 'block',
 };
 
 export default function LeftPanel({ activeTool, onTool, snapOn, onSnap, onInsertPreset, onDialog }: Props) {
   return (
-    <div style={{ width: 200, background: '#fff', borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', flexShrink: 0, boxShadow: '2px 0 8px rgba(0,0,0,0.04)', overflowY: 'auto' }}>
+    <div style={{ width: 200, background: 'var(--panel)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', flexShrink: 0, overflowY: 'auto' }}>
 
       {/* ── Tools ── */}
       <div style={{ padding: '0 8px 8px' }}>
@@ -250,17 +250,17 @@ export default function LeftPanel({ activeTool, onTool, snapOn, onSnap, onInsert
                   style={{
                     width: '100%', display: 'flex', alignItems: 'center', gap: 9,
                     padding: '7px 10px', borderRadius: 8, border: 'none', marginBottom: 2,
-                    background: activeTool === t.id ? '#eff6ff' : 'transparent',
-                    color: activeTool === t.id ? '#2563eb' : '#475569',
+                    background: activeTool === t.id ? 'var(--accent-soft)' : 'transparent',
+                    color: activeTool === t.id ? 'var(--accent)' : 'var(--text-2)',
                     cursor: 'pointer', fontSize: 12, fontWeight: activeTool === t.id ? 700 : 500,
-                    transition: 'all 0.1s', textAlign: 'left',
+                    transition: 'all 0.1s', textAlign: 'left', fontFamily: 'inherit',
                   }}
-                  onMouseEnter={e => { if (activeTool !== t.id) (e.currentTarget as HTMLButtonElement).style.background = '#f8fafc'; }}
+                  onMouseEnter={e => { if (activeTool !== t.id) (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg)'; }}
                   onMouseLeave={e => { if (activeTool !== t.id) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
                 >
                   <span style={{ opacity: activeTool === t.id ? 1 : 0.6 }}>{icons[t.id]}</span>
                   <span style={{ flex: 1 }}>{t.label}</span>
-                  <span style={{ fontSize: 9, fontWeight: 700, color: activeTool === t.id ? '#93c5fd' : '#cbd5e1', background: activeTool === t.id ? '#dbeafe' : '#f1f5f9', padding: '1px 5px', borderRadius: 4 }}>{t.key}</span>
+                  <span style={{ fontSize: 9, fontWeight: 700, color: activeTool === t.id ? 'var(--accent)' : 'var(--text-3)', background: 'var(--bg)', padding: '1px 5px', borderRadius: 4 }}>{t.key}</span>
                 </button>
               ))
             )}
@@ -269,15 +269,15 @@ export default function LeftPanel({ activeTool, onTool, snapOn, onSnap, onInsert
 
         {/* Snap */}
         <button onClick={onSnap}
-          style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '7px 10px', borderRadius: 8, border: 'none', marginTop: 4, background: snapOn ? '#f0fdf4' : 'transparent', color: snapOn ? '#059669' : '#94a3b8', cursor: 'pointer', fontSize: 12, fontWeight: snapOn ? 700 : 500, transition: 'all 0.1s', textAlign: 'left' }}>
+          style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '7px 10px', borderRadius: 8, border: 'none', marginTop: 4, background: snapOn ? 'var(--accent-soft)' : 'transparent', color: snapOn ? 'var(--accent)' : 'var(--text-3)', cursor: 'pointer', fontSize: 12, fontWeight: snapOn ? 700 : 500, transition: 'all 0.1s', textAlign: 'left', fontFamily: 'inherit' }}>
           {icons.snap}
           <span style={{ flex: 1 }}>Snap to Grid</span>
-          <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: snapOn ? '#d1fae5' : '#f1f5f9', color: snapOn ? '#059669' : '#94a3b8' }}>{snapOn ? 'ON' : 'OFF'}</span>
+          <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: 'var(--bg)', color: snapOn ? 'var(--accent)' : 'var(--text-3)' }}>{snapOn ? 'ON' : 'OFF'}</span>
         </button>
       </div>
 
       {/* ── Generate ── */}
-      <div style={{ borderTop: '1px solid #f1f5f9' }}>
+      <div style={{ borderTop: '1px solid var(--border-soft)' }}>
         <span style={SECTION_LABEL}>Generate</span>
         <div style={{ padding: '0 8px 8px' }}>
           {([
@@ -286,8 +286,8 @@ export default function LeftPanel({ activeTool, onTool, snapOn, onSnap, onInsert
             { icon: 'fill' as const, label: 'Seat Block',    d: 'block' as const },
           ]).map(g => (
             <button key={g.d} onClick={() => onDialog(g.d)}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '7px 10px', borderRadius: 8, border: 'none', marginBottom: 2, background: 'transparent', color: '#475569', cursor: 'pointer', fontSize: 12, fontWeight: 500, transition: 'all 0.1s', textAlign: 'left' }}
-              onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = '#f8fafc'}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '7px 10px', borderRadius: 8, border: 'none', marginBottom: 2, background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 12, fontWeight: 500, transition: 'all 0.1s', textAlign: 'left', fontFamily: 'inherit' }}
+              onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg)'}
               onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = 'transparent'}
             >
               <span style={{ opacity: 0.6 }}>{icons[g.icon]}</span>
@@ -297,9 +297,8 @@ export default function LeftPanel({ activeTool, onTool, snapOn, onSnap, onInsert
         </div>
       </div>
 
-
       {/* ── Shape Library ── */}
-      <div style={{ borderTop: '1px solid #f1f5f9', flex: 1 }}>
+      <div style={{ borderTop: '1px solid var(--border-soft)', flex: 1 }}>
         <span style={SECTION_LABEL}>Venue Templates</span>
         <div style={{ padding: '0 8px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
           {PRESETS.map(p => (
@@ -308,14 +307,18 @@ export default function LeftPanel({ activeTool, onTool, snapOn, onSnap, onInsert
               whileHover={{ scale: 1.01 }}
               whileTap={{ scale: 0.98 }}
               onClick={() => onInsertPreset(p.build())}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 9, border: '1px solid #f1f5f9', background: '#fff', cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.12s', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}
-              onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.borderColor = '#bfdbfe'}
-              onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.borderColor = '#f1f5f9'}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 9, border: '1px solid var(--border-soft)', background: 'var(--panel)', cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.12s', fontFamily: 'inherit' }}
+              onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--accent)'}
+              onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border-soft)'}
             >
-              <span style={{ fontSize: 18, lineHeight: 1 }}>{p.icon}</span>
+              <div style={{ width: 28, height: 28, borderRadius: 7, background: 'var(--bg)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{color:'var(--text-2)'}}>
+                  <path d="M7 1l1.5 3 3.5.5-2.5 2.5.5 3.5L7 9 4 10.5l.5-3.5L2 4.5 5.5 4 7 1z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
+                </svg>
+              </div>
               <div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#0f172a' }}>{p.label}</div>
-                <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>{p.description}</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-1)' }}>{p.label}</div>
+                <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 1 }}>{p.description}</div>
               </div>
             </motion.button>
           ))}
