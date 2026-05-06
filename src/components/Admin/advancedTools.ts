@@ -7,7 +7,7 @@
  * - Section Templates
  */
 
-import type { BShape, BSeat, BRow, Category, NumberScheme, LayoutState, ValidationResult, ValidationError, ValidationWarning, ImportFormat, ExportFormat } from './builderTypes2';
+import type { BShape, BSeat, BRow, Category, NumberScheme, LayoutState, ValidationResult, ValidationError, ValidationWarning, ImportFormat, ExportFormat, SeatStatus } from './builderTypes2';
 import { CAT_COLOR, centroid, generateBlockSeats, generateRowSeats, generateArcRowSeats } from './builderTypes2';
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -46,10 +46,10 @@ function makeLabelSprite(sec: StadiumSection): THREE.Sprite {
 
 export default function StadiumViewer({ className }: { className?: string }) {
   const mountRef  = useRef<HTMLDivElement>(null);
-  const rendRef   = useRef<THREE.WebGLRenderer>();
-  const camRef    = useRef<THREE.OrthographicCamera>();
-  const sceneRef  = useRef<THREE.Scene>();
-  const rafRef    = useRef<number>();
+  const rendRef   = useRef<THREE.WebGLRenderer | undefined>(undefined);
+  const camRef    = useRef<THREE.OrthographicCamera | undefined>(undefined);
+  const sceneRef  = useRef<THREE.Scene | undefined>(undefined);
+  const rafRef    = useRef<number | undefined>(undefined);
   const instRef   = useRef<THREE.InstancedMesh>();
   const seatData  = useRef<StadiumSeat[]>([]);
   const lblGrp    = useRef<THREE.Group>();

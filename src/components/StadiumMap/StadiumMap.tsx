@@ -72,6 +72,7 @@ export default function StadiumMap({ layoutId, userId, onSectionClick }: Stadium
     if (!map.current) return;
     try {
       const bounds = map.current.getBounds();
+      if (!bounds) return;
       const bbox = `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
       const res = await fetch(`/api/geojson/${layoutId}?bbox=${bbox}`);
       const geojson = await res.json();

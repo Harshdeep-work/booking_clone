@@ -3,9 +3,9 @@
  */
 'use client';
 import { useState, useRef } from 'react';
-import type { GridConfig, SectionTemplate, ValidationResult } from './advancedTools';
+import type { GridConfig, SectionTemplate } from './advancedTools';
 import { SECTION_TEMPLATES, generateSeatGrid, applyTemplate, validateLayout, importFromCSV, exportToCSV, exportToGeoJSON, importFromGeoJSON } from './advancedTools';
-import type { Category, NumberScheme, LayoutState } from './builderTypes2';
+import type { Category, NumberScheme, LayoutState, ValidationResult } from './builderTypes2';
 
 interface Props {
   layout: LayoutState;

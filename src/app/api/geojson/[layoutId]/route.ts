@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3001';
 
-export async function GET(req: NextRequest, { params }: { params: { layoutId: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ layoutId: string }> }) {
   try {
+    const { layoutId } = await params;
     const url = new URL(req.url);
     const bbox = url.searchParams.get('bbox');
-    const backendUrl = `${BACKEND_URL}/api/geojson/${params.layoutId}${bbox ? `?bbox=${bbox}` : ''}`;
+    const backendUrl = `${BACKEND_URL}/api/geojson/${layoutId}${bbox ? `?bbox=${bbox}` : ''}`;
     const res = await fetch(backendUrl, { next: { revalidate: 60 } });
     const data = await res.json();
     return NextResponse.json(data, {

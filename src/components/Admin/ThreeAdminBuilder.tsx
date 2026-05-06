@@ -27,10 +27,10 @@ interface Props {
 
 export default function ThreeAdminBuilder({ onExport }: Props) {
   const mountRef = useRef<HTMLDivElement>(null);
-  const rendRef  = useRef<THREE.WebGLRenderer>();
-  const camRef   = useRef<THREE.OrthographicCamera>();
-  const sceneRef = useRef<THREE.Scene>();
-  const rafRef   = useRef<number>();
+  const rendRef  = useRef<THREE.WebGLRenderer | undefined>(undefined);
+  const camRef   = useRef<THREE.OrthographicCamera | undefined>(undefined);
+  const sceneRef = useRef<THREE.Scene | undefined>(undefined);
+  const rafRef   = useRef<number | undefined>(undefined);
 
   // editor state (refs to avoid stale closures in event handlers)
   const toolRef      = useRef<AdminTool>('select');

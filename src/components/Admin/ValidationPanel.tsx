@@ -1,6 +1,6 @@
 'use client';
 import React from 'react';
-import type { ValidationError } from '@/app/admin/page';
+import type { ValidationError } from './types';
 
 export default function ValidationPanel({ errors }: { errors: ValidationError[] }) {
   if (!errors.length) return null;

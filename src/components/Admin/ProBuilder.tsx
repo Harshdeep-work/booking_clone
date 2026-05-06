@@ -150,7 +150,7 @@ export default function ProBuilder() {
     // Sections
     sectionsRef.current.forEach(sec => {
       const active = selIds.current.has(sec.id) && !vModeRef.current;
-      const col = CAT_HEX[sec.category] || '#6366f1';
+      const col = CAT_COLOR[sec.category] || '#6366f1';
       const verts = sec.vertices; 
       if (verts.length < 2) return;
 
@@ -193,7 +193,7 @@ export default function ProBuilder() {
     const SCOL: Record<string, string> = { available: '#10b981', sold: '#94a3b8', locked: '#f59e0b' };
     seatsRef.current.forEach(seat => {
       const active = selIds.current.has(seat.id) && !vModeRef.current;
-      const col = SCOL[seat.status] || CAT_HEX[seat.category] || '#6366f1';
+      const col = SCOL[seat.status] || CAT_COLOR[seat.category] || '#6366f1';
       const [px, py] = worldToScreen(seat.x, seat.y, cam, W, H);
       const r = Math.max(vModeRef.current ? 1.5 : 2.5, (SEAT_R / 2) * cam.zoom);
 

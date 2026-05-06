@@ -1,6 +1,6 @@
 'use client';
 import React from 'react';
-import type { Tool } from '@/app/admin/page';
+export type Tool = 'select' | 'section' | 'row' | 'seat' | 'pan';
 
 interface AdminToolbarProps {
   activeTool: Tool;

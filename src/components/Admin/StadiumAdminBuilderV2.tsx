@@ -157,7 +157,6 @@ export default function StadiumAdminBuilderV2() {
     const sc=sceneRef.current!;
     secMeshes.current.get(id)?.forEach(o=>sc.remove(o)); secMeshes.current.delete(id);
     polyMeshes.current.get(id)?.forEach(o=>sc.remove(o)); polyMeshes.current.delete(id); polyData.current.delete(id);
-    seatMeshes.current.get(id)?.let?.((m:THREE.Mesh)=>sc.remove(m)); // fallback below
     const sm=seatMeshes.current.get(id);if(sm){sc.remove(sm);seatMeshes.current.delete(id);}
     liveSecs.current=liveSecs.current.filter(s=>s.id!==id);
     liveSeats.current=liveSeats.current.filter(s=>s.id!==id);

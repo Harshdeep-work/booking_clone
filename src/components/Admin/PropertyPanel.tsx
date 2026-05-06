@@ -1,6 +1,21 @@
 'use client';
 import React from 'react';
-import type { Section, Seat } from '@/app/admin/page';
+export interface Section {
+  section_id: string;
+  label: string;
+  category: string;
+  color: string;
+}
+export interface Seat {
+  seat_id: string;
+  row: string;
+  number: number;
+  price: number;
+  category: string;
+  status: 'available' | 'locked' | 'sold';
+  x: number;
+  y: number;
+}
 
 const CATEGORIES = ['FIELD', 'PLATINUM', 'GOLD', 'SILVER', 'BRONZE', 'GENERAL'];
 const CATEGORY_COLORS: Record<string, string> = {

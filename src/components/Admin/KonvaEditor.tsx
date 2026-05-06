@@ -8,8 +8,31 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import Konva from 'konva';
 import { Stage, Layer, Line, Circle, Transformer, Text, Rect } from 'react-konva';
-import type { Section, Seat, ValidationError } from '@/app/admin/page';
-import type { Tool } from '@/app/admin/page';
+export type Tool = 'select' | 'pan' | 'section' | 'seat';
+export interface Section {
+  id: string;
+  section_id: string;
+  label: string;
+  category: string;
+  color: string;
+  points: number[];
+}
+export interface Seat {
+  id: string;
+  seat_id: string;
+  sectionId: string;
+  row: string;
+  number: number;
+  x: number;
+  y: number;
+  price: number;
+  status: 'available' | 'locked' | 'sold';
+  category: string;
+}
+export interface ValidationError {
+  seatId?: string;
+  message?: string;
+}
 
 const CANVAS_W = 1200;
 const CANVAS_H = 800;

@@ -90,7 +90,7 @@ export default function VenueBuilder() {
     
     if (eng.selectedShape) eng.updateShape(updates);
     else if (eng.selectedSeat) eng.updateSeat(updates);
-    else if (eng.selectedRow) eng.updateRow(updates);
+    else if (eng.selectedRow) eng.updateRow(eng.selectedRow.id, updates);
   };
 
   const fitToScreen = () => {
