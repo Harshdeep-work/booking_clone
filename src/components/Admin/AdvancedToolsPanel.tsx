@@ -1,5 +1,5 @@
 /**
- * Advanced Tools Panel — Grid Generator, Templates, Import/Export, Validation
+ * Advanced Tools Panel — Grid Generator, Templates, Import/Export, Validation, Split/Merge/Rotate
  */
 'use client';
 import { useState, useRef } from 'react';
@@ -15,10 +15,14 @@ interface Props {
   onImport: (data: Partial<LayoutState>) => void;
   onExport: (format: 'csv' | 'geojson') => void;
   onValidate: () => void;
+  onSplitSection?: (id: string, axis: 'h' | 'v') => void;
+  onMergeSections?: (ids: string[]) => void;
+  onRotate?: (deg: number) => void;
+  selectedIds?: Set<string>;
 }
 
-export default function AdvancedToolsPanel({ layout, selectedSectionId, onApplyGrid, onApplyTemplate, onImport, onExport, onValidate }: Props) {
-  const [activeTab, setActiveTab] = useState<'grid' | 'templates' | 'import' | 'validate'>('grid');
+export default function AdvancedToolsPanel({ layout, selectedSectionId, onApplyGrid, onApplyTemplate, onImport, onExport, onValidate, onSplitSection, onMergeSections, onRotate, selectedIds }: Props) {
+  const [activeTab, setActiveTab] = useState<'grid' | 'tools' | 'import' | 'validate'>('grid');
   const [gridConfig, setGridConfig] = useState<GridConfig>({
     rows: 10,
     seatsPerRow: 20,
@@ -31,20 +35,20 @@ export default function AdvancedToolsPanel({ layout, selectedSectionId, onApplyG
     numberScheme: '1,2,3',
     category: 'STANDARD',
     basePrice: 100,
+    adaEvery: 0,
+    vomitoryAfter: [],
+    premiumSpacing: false,
   });
+  const [aisleInput, setAisleInput] = useState('');
+  const [vomInput, setVomInput] = useState('');
+  const [rotateAngle, setRotateAngle] = useState(45);
   const [validation, setValidation] = useState<ValidationResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleGenerateGrid = () => {
-    if (!selectedSectionId) {
-      alert('Please select a section first');
-      return;
-    }
-    
+    if (!selectedSectionId) { alert('Select a section first'); return; }
     const section = layout.shapes.find(s => s.id === selectedSectionId);
     if (!section) return;
-    
-    // Calculate bounds from section vertices
     const xs = section.vertices.map(v => v[0]);
     const ys = section.vertices.map(v => v[1]);
     const bounds = {
@@ -113,31 +117,23 @@ export default function AdvancedToolsPanel({ layout, selectedSectionId, onApplyG
   };
 
   return (
-    <div style={{ width: 320, background: '#fff', borderLeft: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ width: 320, background: 'var(--panel)', borderLeft: '1px solid var(--border)', display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Tabs */}
-      <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
-        {(['grid', 'templates', 'import', 'validate'] as const).map(tab => (
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg)', flexShrink: 0 }}>
+        {(['grid', 'tools', 'import', 'validate'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
             style={{
-              flex: 1,
-              padding: '10px 8px',
-              fontSize: 11,
-              fontWeight: 600,
-              textTransform: 'uppercase',
-              letterSpacing: 0.5,
-              border: 'none',
-              background: activeTab === tab ? '#fff' : 'transparent',
-              color: activeTab === tab ? '#3b82f6' : '#64748b',
-              borderBottom: activeTab === tab ? '2px solid #3b82f6' : 'none',
-              cursor: 'pointer',
+              flex: 1, padding: '10px 4px', fontSize: 10, fontWeight: 600,
+              textTransform: 'uppercase', letterSpacing: 0.5, border: 'none',
+              background: activeTab === tab ? 'var(--panel)' : 'transparent',
+              color: activeTab === tab ? 'var(--accent)' : 'var(--text-3)',
+              borderBottom: activeTab === tab ? `2px solid var(--accent)` : '2px solid transparent',
+              cursor: 'pointer', fontFamily: 'inherit',
             }}
           >
-            {tab === 'grid' && '⚡ Grid'}
-            {tab === 'templates' && '📐 Templates'}
-            {tab === 'import' && '📥 I/O'}
-            {tab === 'validate' && '✓ Validate'}
+            {tab === 'grid' ? 'Grid' : tab === 'tools' ? 'Tools' : tab === 'import' ? 'I/O' : 'Validate'}
           </button>
         ))}
       </div>
@@ -147,8 +143,8 @@ export default function AdvancedToolsPanel({ layout, selectedSectionId, onApplyG
         {activeTab === 'grid' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div>
-              <h3 style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', marginBottom: 12 }}>Seat Grid Generator</h3>
-              <p style={{ fontSize: 11, color: '#64748b', marginBottom: 16 }}>Generate seats in bulk for selected section</p>
+              <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)', marginBottom: 12 }}>Seat Grid Generator</h3>
+              <p style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 16 }}>Generate seats in bulk for selected section</p>
             </div>
 
             <div style={fieldGroup}>
@@ -207,49 +203,122 @@ export default function AdvancedToolsPanel({ layout, selectedSectionId, onApplyG
               <input type="number" value={gridConfig.basePrice} onChange={e => setGridConfig({ ...gridConfig, basePrice: +e.target.value })} style={input} min={10} max={5000} />
             </div>
 
+            {/* ── Advanced spacing ── */}
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 10 }}>Advanced Spacing</div>
+
+              <div style={fieldGroup}>
+                <label style={label}>Aisle after seat # (comma-separated)</label>
+                <input type="text" value={aisleInput} placeholder="e.g. 5,10,15"
+                  onChange={e => {
+                    setAisleInput(e.target.value);
+                    const nums = e.target.value.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n));
+                    setGridConfig(c => ({ ...c, aisleAfter: nums }));
+                  }} style={input} />
+              </div>
+
+              <div style={fieldGroup}>
+                <label style={label}>Vomitory after row # (comma-separated)</label>
+                <input type="text" value={vomInput} placeholder="e.g. 5,10"
+                  onChange={e => {
+                    setVomInput(e.target.value);
+                    const nums = e.target.value.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n));
+                    setGridConfig(c => ({ ...c, vomitoryAfter: nums }));
+                  }} style={input} />
+              </div>
+
+              <div style={fieldGroup}>
+                <label style={label}>ADA seat every N seats (0 = off)</label>
+                <input type="number" value={gridConfig.adaEvery ?? 0}
+                  onChange={e => setGridConfig(c => ({ ...c, adaEvery: +e.target.value }))}
+                  style={input} min={0} max={20} />
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0' }}>
+                <span style={label}>Premium spacing (+20%)</span>
+                <label className="tf-toggle">
+                  <input type="checkbox" checked={!!gridConfig.premiumSpacing}
+                    onChange={e => setGridConfig(c => ({ ...c, premiumSpacing: e.target.checked }))} />
+                  <span className="tf-toggle-track" />
+                </label>
+              </div>
+            </div>
+
             <button onClick={handleGenerateGrid} style={primaryBtn} disabled={!selectedSectionId}>
-              {selectedSectionId ? '⚡ Generate Seats' : '⚠️ Select Section First'}
+              {selectedSectionId ? 'Generate Seats' : 'Select a Section First'}
             </button>
           </div>
         )}
 
-        {activeTab === 'templates' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {activeTab === 'tools' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+            {/* Section Templates */}
             <div>
-              <h3 style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', marginBottom: 12 }}>Section Templates</h3>
-              <p style={{ fontSize: 11, color: '#64748b', marginBottom: 16 }}>Quick-start shapes for common section types</p>
+              <div style={sectionLabel}>Section Templates</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                {SECTION_TEMPLATES.map(template => (
+                  <button key={template.id} onClick={() => { const shape = applyTemplate(template, { x: 100, y: 100 }, 1.5); onApplyTemplate(shape); }}
+                    style={{ padding: '12px 8px', border: '1px solid var(--border)', borderRadius: 10, background: 'var(--panel)', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, transition: 'all 0.12s', fontFamily: 'inherit' }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.background = 'var(--accent-soft)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--panel)'; }}
+                  >
+                    <svg width="28" height="28" viewBox="0 0 28 28" fill="none" style={{color:'var(--text-2)'}}><rect x="4" y="4" width="20" height="20" rx="3" stroke="currentColor" strokeWidth="1.5"/></svg>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-1)' }}>{template.name}</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              {SECTION_TEMPLATES.map(template => (
-                <button
-                  key={template.id}
-                  onClick={() => handleApplyTemplate(template)}
-                  style={{
-                    padding: '16px 12px',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: 8,
-                    background: '#fff',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: 8,
-                    transition: 'all 0.15s',
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.borderColor = '#3b82f6';
-                    e.currentTarget.style.background = '#eff6ff';
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.borderColor = '#e2e8f0';
-                    e.currentTarget.style.background = '#fff';
-                  }}
-                >
-                  <div style={{ fontSize: 32 }}>{template.icon}</div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#0f172a' }}>{template.name}</div>
+            {/* Split */}
+            <div>
+              <div style={sectionLabel}>Split Section</div>
+              <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10 }}>
+                Splits selected section into two (A101 → A101-A + A101-B)
+              </p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button style={secondaryBtn} disabled={!selectedSectionId}
+                  onClick={() => selectedSectionId && onSplitSection?.(selectedSectionId, 'v')}>
+                  Split Vertical
                 </button>
-              ))}
+                <button style={secondaryBtn} disabled={!selectedSectionId}
+                  onClick={() => selectedSectionId && onSplitSection?.(selectedSectionId, 'h')}>
+                  Split Horizontal
+                </button>
+              </div>
+            </div>
+
+            {/* Merge */}
+            <div>
+              <div style={sectionLabel}>Merge Sections</div>
+              <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10 }}>
+                Select 2+ sections then merge into one
+              </p>
+              <button style={secondaryBtn}
+                disabled={!selectedIds || selectedIds.size < 2}
+                onClick={() => selectedIds && onMergeSections?.([...selectedIds])}>
+                Merge {selectedIds && selectedIds.size >= 2 ? `(${selectedIds.size} selected)` : '(select 2+)'}
+              </button>
+            </div>
+
+            {/* Rotate */}
+            <div>
+              <div style={sectionLabel}>Rotate Selection</div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                <input type="number" value={rotateAngle} onChange={e => setRotateAngle(+e.target.value)}
+                  style={{ ...input, width: 70 }} min={-360} max={360} />
+                <span style={{ fontSize: 11, color: 'var(--text-2)' }}>degrees</span>
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                {[45, 90, 180, -45, -90].map(d => (
+                  <button key={d} style={{ ...secondaryBtn, padding: '4px 10px', fontSize: 10 }}
+                    onClick={() => onRotate?.(d)}>{d > 0 ? `+${d}°` : `${d}°`}</button>
+                ))}
+              </div>
+              <button style={primaryBtn} disabled={!selectedIds || selectedIds.size === 0}
+                onClick={() => onRotate?.(rotateAngle)}>
+                Rotate {rotateAngle}°
+              </button>
             </div>
           </div>
         )}
@@ -257,21 +326,21 @@ export default function AdvancedToolsPanel({ layout, selectedSectionId, onApplyG
         {activeTab === 'import' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div>
-              <h3 style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', marginBottom: 12 }}>Import / Export</h3>
-              <p style={{ fontSize: 11, color: '#64748b', marginBottom: 16 }}>Bulk data operations</p>
+              <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)', marginBottom: 12 }}>Import / Export</h3>
+              <p style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 16 }}>Bulk data operations</p>
             </div>
 
-            <div style={{ padding: 12, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
-              <h4 style={{ fontSize: 11, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>📥 Import</h4>
-              <p style={{ fontSize: 10, color: '#64748b', marginBottom: 12 }}>Supported: CSV, JSON, GeoJSON</p>
+            <div style={{ padding: 12, background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)' }}>
+              <h4 style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-1)', marginBottom: 8 }}>Import</h4>
+              <p style={{ fontSize: 10, color: 'var(--text-2)', marginBottom: 12 }}>Supported: CSV, JSON, GeoJSON</p>
               <input ref={fileInputRef} type="file" accept=".csv,.json,.geojson" onChange={handleFileImport} style={{ display: 'none' }} />
               <button onClick={() => fileInputRef.current?.click()} style={secondaryBtn}>
                 Choose File
               </button>
             </div>
 
-            <div style={{ padding: 12, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
-              <h4 style={{ fontSize: 11, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>📤 Export</h4>
+            <div style={{ padding: 12, background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)' }}>
+              <h4 style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-1)', marginBottom: 8 }}>Export</h4>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <button onClick={() => handleExport('csv')} style={secondaryBtn}>
                   Export as CSV
@@ -294,12 +363,12 @@ export default function AdvancedToolsPanel({ layout, selectedSectionId, onApplyG
         {activeTab === 'validate' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div>
-              <h3 style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', marginBottom: 12 }}>Layout Validation</h3>
-              <p style={{ fontSize: 11, color: '#64748b', marginBottom: 16 }}>Check for errors and warnings</p>
+              <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)', marginBottom: 12 }}>Layout Validation</h3>
+              <p style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 16 }}>Check for errors and warnings</p>
             </div>
 
             <button onClick={handleValidate} style={primaryBtn}>
-              🔍 Run Validation
+              Run Validation
             </button>
 
             {validation && (
@@ -351,38 +420,49 @@ const fieldGroup: React.CSSProperties = {
 const label: React.CSSProperties = {
   fontSize: 11,
   fontWeight: 600,
-  color: '#475569',
+  color: 'var(--text-2)',
+};
+
+const sectionLabel: React.CSSProperties = {
+  fontSize: 9,
+  fontWeight: 700,
+  letterSpacing: 0.8,
+  textTransform: 'uppercase' as const,
+  color: 'var(--text-3)',
+  marginBottom: 8,
 };
 
 const input: React.CSSProperties = {
-  padding: '8px 10px',
+  padding: '7px 10px',
   fontSize: 12,
-  border: '1px solid #e2e8f0',
-  borderRadius: 6,
-  background: '#fff',
-  color: '#0f172a',
+  border: '1px solid var(--border)',
+  borderRadius: 8,
+  background: 'var(--bg)',
+  color: 'var(--text-1)',
   fontFamily: 'inherit',
+  outline: 'none',
 };
 
 const primaryBtn: React.CSSProperties = {
-  padding: '10px 16px',
+  padding: '9px 16px',
   fontSize: 12,
   fontWeight: 600,
   border: 'none',
   borderRadius: 8,
-  background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
-  color: '#fff',
+  background: 'var(--text-1)',
+  color: 'var(--panel)',
   cursor: 'pointer',
-  transition: 'transform 0.15s',
+  fontFamily: 'inherit',
 };
 
 const secondaryBtn: React.CSSProperties = {
-  padding: '8px 12px',
+  padding: '7px 12px',
   fontSize: 11,
   fontWeight: 600,
-  border: '1px solid #e2e8f0',
-  borderRadius: 6,
-  background: '#fff',
-  color: '#475569',
+  border: '1px solid var(--border)',
+  borderRadius: 8,
+  background: 'var(--panel)',
+  color: 'var(--text-2)',
   cursor: 'pointer',
+  fontFamily: 'inherit',
 };

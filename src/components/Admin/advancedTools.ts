@@ -21,6 +21,9 @@ export interface GridConfig {
   seatSpacing: number;
   curveRadius?: number;
   aisleAfter?: number[];
+  vomitoryAfter?: number[];
+  adaEvery?: number;
+  premiumSpacing?: boolean;
   startRow: string;
   startNumber: number;
   numberScheme: NumberScheme;
@@ -33,7 +36,8 @@ export function generateSeatGrid(
   bounds: { x0: number; y0: number; x1: number; y1: number },
   config: GridConfig
 ): { rows: BRow[]; seats: BSeat[] } {
-  const { rows, seatsPerRow, rowSpacing, seatSpacing, curveRadius, aisleAfter, startRow, startNumber, numberScheme, category, basePrice } = config;
+  const { rows, seatsPerRow, rowSpacing, seatSpacing, curveRadius, aisleAfter, vomitoryAfter, adaEvery, premiumSpacing, startRow, startNumber, numberScheme, category, basePrice } = config;
+  const spacing = premiumSpacing ? seatSpacing * 1.2 : seatSpacing;
   
   const outRows: BRow[] = [];
   const outSeats: BSeat[] = [];
@@ -44,34 +48,30 @@ export function generateSeatGrid(
   for (let r = 0; r < rows; r++) {
     const rowLabel = String.fromCharCode(startRow.charCodeAt(0) + r);
     const rowId = `row-${sectionId}-${r}`;
-    const rowY = bounds.y0 + (r + 0.5) * (totalHeight / rows);
+    // vomitory gap: extra row spacing after certain rows
+    const vomBefore = vomitoryAfter?.includes(r) ? rowSpacing * 2 : 0;
+    const rowY = bounds.y0 + (r + 0.5) * (totalHeight / rows) + vomBefore;
     
     const rowSeats: BSeat[] = [];
     let seatNum = startNumber;
     
     for (let s = 0; s < seatsPerRow; s++) {
-      // Check for aisle gap
       const isAisle = aisleAfter?.includes(s);
+      const isADA = adaEvery && adaEvery > 0 && s % adaEvery === 0;
       
       let x: number, y: number;
       
       if (curveRadius) {
-        // Curved row
         const angle = ((s / (seatsPerRow - 1)) - 0.5) * (totalWidth / curveRadius);
         x = bounds.x0 + totalWidth / 2 + Math.sin(angle) * curveRadius;
         y = rowY + (1 - Math.cos(angle)) * Math.abs(curveRadius) * 0.3;
       } else {
-        // Straight row
         x = bounds.x0 + (s + 0.5) * (totalWidth / seatsPerRow);
         y = rowY;
       }
       
-      // Apply aisle spacing
-      if (isAisle) {
-        x += seatSpacing * 2;
-      }
+      if (isAisle) x += spacing * 2;
       
-      // Number scheme
       let num = seatNum;
       if (numberScheme === 'odd') num = seatNum * 2 - 1;
       else if (numberScheme === 'even') num = seatNum * 2;
@@ -88,6 +88,7 @@ export function generateSeatGrid(
         status: 'available',
         category,
         aisleGap: isAisle,
+        isAccessible: !!isADA,
       });
       
       seatNum++;

@@ -20,6 +20,19 @@ const SEAT_HIT = 10;
 function snap(v: number) { return snapVal(v, GRID); }
 function uid() { return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`; }
 
+// Simple convex hull (Graham scan)
+function convexHull(pts: [number,number][]): [number,number][] {
+  if (pts.length < 3) return pts;
+  const sorted = [...pts].sort((a,b) => a[0]-b[0] || a[1]-b[1]);
+  const cross = (o:[number,number],a:[number,number],b:[number,number]) =>
+    (a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);
+  const lower: [number,number][] = [];
+  for (const p of sorted) { while (lower.length>=2 && cross(lower[lower.length-2],lower[lower.length-1],p)<=0) lower.pop(); lower.push(p); }
+  const upper: [number,number][] = [];
+  for (const p of [...sorted].reverse()) { while (upper.length>=2 && cross(upper[upper.length-2],upper[upper.length-1],p)<=0) upper.pop(); upper.push(p); }
+  return [...lower.slice(0,-1), ...upper.slice(0,-1)];
+}
+
 export function useBuilderEngine() {
   // ── Refs (hot path) ────────────────────────────────────────────────────────
   const camRef    = useRef<Camera>({ x: 0, y: 0, zoom: 1 });
@@ -616,6 +629,94 @@ export function useBuilderEngine() {
     syncSel(new Set());
   }, [syncSel]);
 
+  // ── Split section ──────────────────────────────────────────────────────────
+  const splitSection = useCallback((shapeId: string, axis: 'h' | 'v') => {
+    const shape = layoutRef.current.shapes.find(s => s.id === shapeId);
+    if (!shape) return;
+    const xs = shape.vertices.map(v => v[0]);
+    const ys = shape.vertices.map(v => v[1]);
+    const midX = (Math.min(...xs) + Math.max(...xs)) / 2;
+    const midY = (Math.min(...ys) + Math.max(...ys)) / 2;
+
+    const uid2 = () => `${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+    const idA = `${shapeId}-a`, idB = `${shapeId}-b`;
+
+    let vertsA: [number,number][], vertsB: [number,number][];
+    if (axis === 'v') {
+      vertsA = shape.vertices.map(([x,y]) => [Math.min(x, midX), y] as [number,number]);
+      vertsB = shape.vertices.map(([x,y]) => [Math.max(x, midX), y] as [number,number]);
+    } else {
+      vertsA = shape.vertices.map(([x,y]) => [x, Math.min(y, midY)] as [number,number]);
+      vertsB = shape.vertices.map(([x,y]) => [x, Math.max(y, midY)] as [number,number]);
+    }
+
+    const [cxA, cyA] = [vertsA.reduce((s,v)=>s+v[0],0)/vertsA.length, vertsA.reduce((s,v)=>s+v[1],0)/vertsA.length];
+    const [cxB, cyB] = [vertsB.reduce((s,v)=>s+v[0],0)/vertsB.length, vertsB.reduce((s,v)=>s+v[1],0)/vertsB.length];
+
+    const shapeA: typeof shape = { ...shape, id: idA, label: shape.label + '-A', vertices: vertsA, cx: cxA, cy: cyA };
+    const shapeB: typeof shape = { ...shape, id: idB, label: shape.label + '-B', vertices: vertsB, cx: cxB, cy: cyB };
+
+    const next: LayoutState = {
+      ...layoutRef.current,
+      shapes: layoutRef.current.shapes.filter(s => s.id !== shapeId).concat([shapeA, shapeB]),
+      seats: layoutRef.current.seats.map(s => s.sectionId === shapeId
+        ? { ...s, sectionId: (axis === 'v' ? s.x < midX : s.y < midY) ? idA : idB }
+        : s
+      ),
+    };
+    commit(next, `Split ${shape.label}`);
+    syncSel(new Set([idA, idB]));
+  }, [commit, syncSel]);
+
+  // ── Merge sections ─────────────────────────────────────────────────────────
+  const mergeSections = useCallback((ids: string[]) => {
+    if (ids.length < 2) return;
+    const shapes = layoutRef.current.shapes.filter(s => ids.includes(s.id));
+    if (shapes.length < 2) return;
+    const allVerts = shapes.flatMap(s => s.vertices);
+    const cx = allVerts.reduce((a,v)=>a+v[0],0)/allVerts.length;
+    const cy = allVerts.reduce((a,v)=>a+v[1],0)/allVerts.length;
+    // convex hull of all vertices
+    const hull = convexHull(allVerts);
+    const merged = { ...shapes[0], id: `merged-${Date.now()}`, label: shapes.map(s=>s.label).join('+'), vertices: hull, cx, cy };
+    const next: LayoutState = {
+      ...layoutRef.current,
+      shapes: layoutRef.current.shapes.filter(s => !ids.includes(s.id)).concat([merged]),
+      seats: layoutRef.current.seats.map(s => ids.includes(s.sectionId) ? { ...s, sectionId: merged.id } : s),
+    };
+    commit(next, `Merge sections`);
+    syncSel(new Set([merged.id]));
+  }, [commit, syncSel]);
+
+  // ── Rotate selection ───────────────────────────────────────────────────────
+  const rotateSelected = useCallback((angleDeg: number) => {
+    const ids = selRef.current;
+    if (ids.size === 0) return;
+    const rad = (angleDeg * Math.PI) / 180;
+    const cos = Math.cos(rad), sin = Math.sin(rad);
+    // pivot = centroid of all selected shapes
+    const shapes = layoutRef.current.shapes.filter(s => ids.has(s.id));
+    const allPts = shapes.flatMap(s => s.vertices);
+    const px = allPts.reduce((a,v)=>a+v[0],0)/Math.max(allPts.length,1);
+    const py = allPts.reduce((a,v)=>a+v[1],0)/Math.max(allPts.length,1);
+    const rot = ([x,y]: [number,number]): [number,number] => {
+      const dx = x-px, dy = y-py;
+      return [px + dx*cos - dy*sin, py + dx*sin + dy*cos];
+    };
+    const next: LayoutState = {
+      ...layoutRef.current,
+      shapes: layoutRef.current.shapes.map(s => ids.has(s.id)
+        ? { ...s, vertices: s.vertices.map(rot), cx: rot([s.cx,s.cy])[0], cy: rot([s.cx,s.cy])[1] }
+        : s
+      ),
+      seats: layoutRef.current.seats.map(s => ids.has(s.sectionId)
+        ? { ...s, ...{ x: rot([s.x,s.y])[0], y: rot([s.x,s.y])[1] } }
+        : s
+      ),
+    };
+    commit(next, `Rotate ${angleDeg}°`);
+  }, [commit]);
+
   const cursor = tool === 'pan' || isPanning.current ? 'grab'
     : tool === 'select' ? 'default'
     : 'crosshair';
@@ -637,6 +738,7 @@ export function useBuilderEngine() {
     changeTool, onPointerDown, onPointerMove, onPointerUp, onDblClick, onWheel,
     updateShape, updateSeat, updateText, updateRow, deleteSelected, fillSection,
     applyGeneratedLayout, multiUpdate, exitSectionMode,
+    splitSection, mergeSections, rotateSelected,
     loadTemplate: (state: LayoutState) => { layoutRef.current = state; setLayout(state); syncSel(new Set()); },
     restoreSnapshot: (s: Snapshot) => { const r = JSON.parse(JSON.stringify(s.state)); layoutRef.current = r; setLayout(r); syncSel(new Set()); },
     exportLayout: () => {

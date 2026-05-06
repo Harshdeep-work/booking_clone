@@ -9,6 +9,7 @@ import AdvancedToolsPanel from './AdvancedToolsPanel';
 import GenerateDialogs from './GenerateDialogs';
 import LeftPanel from './LeftPanel';
 import EmptyState from './EmptyState';
+import LayerPanel from './LayerPanel';
 import { useBuilderEngine } from './useBuilderEngine';
 import { icons } from './BuilderIcons';
 import type { LayoutState } from './builderTypes2';
@@ -32,6 +33,9 @@ export default function VenueBuilder() {
     { role: 'assistant', text: 'Hi! I can help you design your venue layout. Try: "Add 20 rows to section 101" or "Generate an NBA arena".' }
   ]);
   const [darkMode, setDarkMode]               = useState(false);
+  const [showLayers, setShowLayers]           = useState(false);
+  const [show3D, setShow3D]                   = useState(false);
+  const [viewMode, setViewMode]               = useState<'top'|'perspective'>('top');
 
   const eng = useBuilderEngine();
   const isEmpty = eng.layout.shapes.length === 0 && eng.layout.seats.length === 0;
@@ -170,6 +174,18 @@ export default function VenueBuilder() {
           <button className={`tf-chip-btn${showHistory?' active':''}`} onClick={() => setShowHistory(h => !h)}>
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/><path d="M6 3.5V6l2 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
             History
+          </button>
+          <button className={`tf-chip-btn${showLayers?' active':''}`} onClick={() => setShowLayers(l => !l)}>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 4l5-3 5 3-5 3-5-3zM1 8l5 3 5-3M1 6l5 3 5-3" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
+            Layers
+          </button>
+          <button className={`tf-chip-btn${show3D?' active':''}`} onClick={() => setShow3D(v => !v)}>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1l5 3v4l-5 3-5-3V4l5-3z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
+            3D
+          </button>
+          <button className={`tf-chip-btn${viewMode==='perspective'?' active':''}`} onClick={() => setViewMode(v => v==='top'?'perspective':'top')}>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 9L6 3l5 6H1z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
+            {viewMode === 'top' ? 'Top' : 'Persp'}
           </button>
           <button className={`tf-chip-btn${eng.bgImage?' active':''}`} onClick={() => fileRef.current?.click()}>
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1" y="2" width="10" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><circle cx="4" cy="5" r="1" stroke="currentColor" strokeWidth="1.1"/><path d="M1 8l3-2.5 2 2 2-2.5 3 3" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
@@ -384,11 +400,15 @@ export default function VenueBuilder() {
               <AdvancedToolsPanel
                 layout={eng.layout}
                 selectedSectionId={eng.selectedShape?.id || null}
+                selectedIds={eng.selectedIds}
                 onApplyGrid={handleApplyGrid}
                 onApplyTemplate={handleApplyTemplate}
                 onImport={handleImport}
                 onExport={handleExport}
                 onValidate={handleValidate}
+                onSplitSection={eng.splitSection}
+                onMergeSections={eng.mergeSections}
+                onRotate={eng.rotateSelected}
               />
             </motion.div>
           )}
@@ -423,6 +443,36 @@ export default function VenueBuilder() {
                     <div className="tf-history-item-time">{new Date(s.ts).toLocaleTimeString()}</div>
                   </div>
                 ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ── Layers ────────────────────────────────────────────────────── */}
+        <AnimatePresence>
+          {showLayers && (
+            <motion.div key="layers"
+              initial={{x:240,opacity:0}} animate={{x:0,opacity:1}} exit={{x:240,opacity:0}}
+              transition={{type:'spring',stiffness:320,damping:32}}
+            >
+              <LayerPanel onClose={() => setShowLayers(false)} />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ── 3D Preview ────────────────────────────────────────────────── */}
+        <AnimatePresence>
+          {show3D && (
+            <motion.div key="3d"
+              initial={{opacity:0,scale:0.95}} animate={{opacity:1,scale:1}} exit={{opacity:0,scale:0.95}}
+              transition={{type:'spring',stiffness:300,damping:28}}
+              style={{position:'fixed',inset:60,background:'rgba(0,0,0,0.85)',backdropFilter:'blur(12px)',borderRadius:20,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:40}}
+            >
+              <button onClick={() => setShow3D(false)} style={{position:'absolute',top:20,right:20,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.2)',borderRadius:10,width:36,height:36,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'white'}}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+              </button>
+              <div style={{color:'white',fontSize:18,fontWeight:600}}>
+                3D Preview (Three.js integration coming soon)
               </div>
             </motion.div>
           )}

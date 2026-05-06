@@ -1,5 +1,5 @@
 // ── Types ─────────────────────────────────────────────────────────────────────
-export type ToolId = 'select' | 'section' | 'rect' | 'circle' | 'ellipse' | 'triangle' | 'diamond' | 'pentagon' | 'hexagon' | 'star' | 'row' | 'multirow' | 'arcrow' | 'block' | 'text' | 'pan' | 'grid' | 'curve' | '4corner' | 'table';
+export type ToolId = 'select' | 'section' | 'rect' | 'circle' | 'ellipse' | 'triangle' | 'diamond' | 'pentagon' | 'hexagon' | 'star' | 'row' | 'multirow' | 'arcrow' | 'block' | 'text' | 'pan' | 'grid' | 'curve' | '4corner' | 'table' | 'rotate' | 'split' | 'merge';
 export type ShapeType = 'section' | 'stage' | 'ga' | 'court' | 'suite' | 'pressbox' | 'scoreboard' | 'tunnel' | 'concourse' | 'ada' | 'text' | 'table' | 'standing';
 export type Category = 'VIP' | 'PREMIUM' | 'STANDARD' | 'BUDGET' | 'GA';
 export type SeatStatus = 'available' | 'sold' | 'locked' | 'obstructed';
@@ -64,6 +64,24 @@ export interface LayoutState {
   seats: BSeat[];
   texts: BText[];
 }
+
+export type LayerId = 'sections' | 'seats' | 'labels' | 'pricing' | 'entrances' | 'overlays';
+
+export interface LayerState {
+  id: LayerId;
+  label: string;
+  visible: boolean;
+  locked: boolean;
+}
+
+export const DEFAULT_LAYERS: LayerState[] = [
+  { id: 'sections',  label: 'Sections',  visible: true, locked: false },
+  { id: 'seats',     label: 'Seats',     visible: true, locked: false },
+  { id: 'labels',    label: 'Labels',    visible: true, locked: false },
+  { id: 'pricing',   label: 'Pricing',   visible: true, locked: false },
+  { id: 'entrances', label: 'Entrances', visible: true, locked: false },
+  { id: 'overlays',  label: 'Overlays',  visible: true, locked: false },
+];
 
 export interface ValidationResult {
   valid: boolean;
