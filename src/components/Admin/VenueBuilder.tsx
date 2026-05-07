@@ -65,14 +65,32 @@ export default function VenueBuilder() {
     setShowEmpty(false);
   };
 
-  const handleExport = (_format: 'csv' | 'geojson') => {
-    eng.exportLayout();
+  const handleExport = (format: 'csv' | 'geojson') => {
+    import('./advancedTools').then(({ exportToCSV, exportToGeoJSON }) => {
+      let content: string, filename: string;
+      if (format === 'csv') {
+        content = exportToCSV(eng.layout, true);
+        filename = `${eng.venueName.replace(/\s+/g,'_')}.csv`;
+      } else {
+        content = JSON.stringify(exportToGeoJSON(eng.layout), null, 2);
+        filename = `${eng.venueName.replace(/\s+/g,'_')}.geojson`;
+      }
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([content], { type: 'text/plain' }));
+      a.download = filename;
+      a.click();
+    });
   };
+
+  const [validationMsg, setValidationMsg] = useState<{ok:boolean;text:string}|null>(null);
 
   const handleValidate = () => {
     const result = validateLayout(eng.layout);
-    if (result.valid) alert('Layout is valid!');
-    else alert(`${result.errors.length} error(s):\n\n${result.errors.map(e => e.message).join('\n')}`);
+    setValidationMsg(result.valid
+      ? { ok: true, text: `Valid — ${eng.counts.sections} sections, ${eng.counts.seats} seats` }
+      : { ok: false, text: result.errors.map(e => e.message).join('\n') }
+    );
+    setTimeout(() => setValidationMsg(null), 5000);
   };
 
   const handleUploadPhoto = async (file: File): Promise<string> => URL.createObjectURL(file);
@@ -138,10 +156,10 @@ export default function VenueBuilder() {
 
         {/* Centre */}
         <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-          <button className="tf-icon-btn" onClick={() => window.dispatchEvent(new KeyboardEvent('keydown',{key:'z',ctrlKey:true,bubbles:true}))} title="Undo">
+          <button className="tf-icon-btn" onClick={eng.undo} title="Undo (Ctrl+Z)">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 5h6a4 4 0 010 8H4M2 5l3-3M2 5l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </button>
-          <button className="tf-icon-btn" onClick={() => window.dispatchEvent(new KeyboardEvent('keydown',{key:'y',ctrlKey:true,bubbles:true}))} title="Redo">
+          <button className="tf-icon-btn" onClick={eng.redo} title="Redo (Ctrl+Y)">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M12 5H6a4 4 0 000 8h4M12 5l-3-3M12 5l-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </button>
           <div className="tf-divider-v" />
@@ -151,11 +169,11 @@ export default function VenueBuilder() {
           </div>
           <div className="tf-divider-v" />
           <div className="tf-zoom-group">
-            <button className="tf-zoom-btn" onClick={() => window.dispatchEvent(new WheelEvent('wheel',{deltaY:100,bubbles:true}))} title="Zoom out">
+            <button className="tf-zoom-btn" onClick={eng.zoomOut} title="Zoom out">
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
             </button>
             <span className="tf-zoom-pct">{eng.zoomPct}%</span>
-            <button className="tf-zoom-btn" onClick={() => window.dispatchEvent(new WheelEvent('wheel',{deltaY:-100,bubbles:true}))} title="Zoom in">
+            <button className="tf-zoom-btn" onClick={eng.zoomIn} title="Zoom in">
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 2v8M2 6h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
             </button>
           </div>
@@ -255,6 +273,27 @@ export default function VenueBuilder() {
 
           <AnimatePresence>
             {isEmpty && showEmpty && <EmptyState onDismiss={() => setShowEmpty(false)} />}
+          </AnimatePresence>
+
+          {/* Validation toast */}
+          <AnimatePresence>
+            {validationMsg && (
+              <motion.div
+                key="toast"
+                initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} exit={{opacity:0, y:20}}
+                style={{
+                  position:'absolute', bottom:48, left:'50%', transform:'translateX(-50%)',
+                  background: validationMsg.ok ? '#F0FDF4' : '#FEF2F2',
+                  border: `1px solid ${validationMsg.ok ? '#86EFAC' : '#FCA5A5'}`,
+                  color: validationMsg.ok ? '#166534' : '#991B1B',
+                  borderRadius:12, padding:'10px 18px', fontSize:12, fontWeight:600,
+                  boxShadow:'0 4px 16px rgba(0,0,0,0.1)', zIndex:30, maxWidth:400,
+                  whiteSpace:'pre-wrap', textAlign:'center',
+                }}
+              >
+                {validationMsg.ok ? '✓ ' : '✗ '}{validationMsg.text}
+              </motion.div>
+            )}
           </AnimatePresence>
 
           <AnimatePresence>

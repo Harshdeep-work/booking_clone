@@ -483,34 +483,60 @@ export function useBuilderEngine() {
 
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
         e.preventDefault();
-        setHistory(h => {
-          if (h.length < 2) return h;
-          const [cur, prev, ...rest] = h;
-          setRedoStack(r => [cur, ...r]);
-          const restored = JSON.parse(JSON.stringify(prev.state));
-          layoutRef.current = restored;
-          setLayout(restored);
-          return [prev, ...rest];
-        });
+        undo();
       }
       if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) {
         e.preventDefault();
-        setRedoStack(r => {
-          if (r.length === 0) return r;
-          const [top, ...rest] = r;
-          const restored = JSON.parse(JSON.stringify(top.state));
-          layoutRef.current = restored;
-          setLayout(restored);
-          setHistory(h => [top, ...h]);
-          return rest;
-        });
+        redo();
       }
     };
     window.addEventListener('keydown', kd);
     return () => window.removeEventListener('keydown', kd);
   }, [commit, syncSel]);
 
-  // ── Tool change ────────────────────────────────────────────────────────────
+  // ── Undo / Redo (callable directly) ───────────────────────────────────────
+  const undo = useCallback(() => {
+    setHistory(h => {
+      if (h.length < 2) return h;
+      const [cur, prev, ...rest] = h;
+      setRedoStack(r => [cur, ...r]);
+      const restored = JSON.parse(JSON.stringify(prev.state));
+      layoutRef.current = restored;
+      setLayout(restored);
+      return [prev, ...rest];
+    });
+  }, []);
+
+  const redo = useCallback(() => {
+    setRedoStack(r => {
+      if (r.length === 0) return r;
+      const [top, ...rest] = r;
+      const restored = JSON.parse(JSON.stringify(top.state));
+      layoutRef.current = restored;
+      setLayout(restored);
+      setHistory(h => [top, ...h]);
+      return rest;
+    });
+  }, []);
+
+  // ── Zoom (callable directly) ───────────────────────────────────────────────
+  const zoomIn = useCallback(() => {
+    const cam = camRef.current;
+    const newZ = Math.min(40, cam.zoom * 1.25);
+    const newCam = { ...cam, zoom: newZ };
+    camRef.current = newCam;
+    setCamera(newCam);
+    setZoomPct(Math.round(newZ * 100));
+  }, []);
+
+  const zoomOut = useCallback(() => {
+    const cam = camRef.current;
+    const newZ = Math.max(0.05, cam.zoom * 0.8);
+    const newCam = { ...cam, zoom: newZ };
+    camRef.current = newCam;
+    setCamera(newCam);
+    setZoomPct(Math.round(newZ * 100));
+  }, []);
   const changeTool = useCallback((t: ToolId) => {
     toolRef.current = t;
     setTool(t);
@@ -739,6 +765,7 @@ export function useBuilderEngine() {
     updateShape, updateSeat, updateText, updateRow, deleteSelected, fillSection,
     applyGeneratedLayout, multiUpdate, exitSectionMode,
     splitSection, mergeSections, rotateSelected,
+    undo, redo, zoomIn, zoomOut,
     loadTemplate: (state: LayoutState) => { layoutRef.current = state; setLayout(state); syncSel(new Set()); },
     restoreSnapshot: (s: Snapshot) => { const r = JSON.parse(JSON.stringify(s.state)); layoutRef.current = r; setLayout(r); syncSel(new Set()); },
     exportLayout: () => {

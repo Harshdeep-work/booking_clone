@@ -1,6 +1,7 @@
 'use client';
 /**
- * StadiumMap — Core Mapbox GL JS 3D Map Component
+ * StadiumMap — Core Mapboxedoitor not working 
+ * improve thsi some function adnsome byutton are not wroking and some  GL JS 3D Map Component
  * - fill-extrusion layers for 3D sections
  * - feature-state: hover, selected, locked, sold
  * - Seat circle layer (WebGL, no JSX, Fix 4)
@@ -67,6 +68,7 @@ export default function StadiumMap({ layoutId, userId, onSectionClick }: Stadium
   const { status, onSeatLocked, onSeatUnlocked, onSeatSold, onBulkSeatUpdate } = useSocket();
   const { isInCart, addSeat, removeSeat } = useCart();
 
+  
   // Fetch sections GeoJSON from API
   const loadSectionLayer = useCallback(async () => {
     if (!map.current) return;
