@@ -21,7 +21,7 @@ interface Props {
   onShape: (u: Partial<BShape>) => void;
   onSeat: (u: Partial<BSeat>) => void;
   onText: (u: Partial<BText>) => void;
-  onRow: (rowId: string, u: { label?: string; category?: Category; curveRadius?: number; seatSpacing?: number }) => void;
+  onRow: (rowId: string, u: { label?: string; category?: Category; seatCount?: number; curveRadius?: number; seatSpacing?: number }) => void;
   onMultiCategory: (c: Category) => void;
   onMultiPrice: (p: number) => void;
   onMultiStatus: (s: SeatStatus) => void;
@@ -313,9 +313,9 @@ export default function PropertiesPanel(props: Props) {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <span style={{ fontSize: 12, color: 'var(--text-2)' }}>Number of seats</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <button style={stepBtn} onClick={() => onRow(row.id, { seatSpacing: rowSpacing })}>−</button>
+                    <button style={stepBtn} onClick={() => onRow(row.id, { seatCount: Math.max(1, row.seatCount - 1) })}>−</button>
                     <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-1)', minWidth: 24, textAlign: 'center' }}>{row.seatCount}</span>
-                    <button style={stepBtn} onClick={() => onRow(row.id, { seatSpacing: rowSpacing })}>+</button>
+                    <button style={stepBtn} onClick={() => onRow(row.id, { seatCount: row.seatCount + 1 })}>+</button>
                   </div>
                 </div>
 

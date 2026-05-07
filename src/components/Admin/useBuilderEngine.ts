@@ -575,6 +575,30 @@ export function useBuilderEngine() {
         return { ...s, label: `${newLabel}${num}`, ...(u.category ? { category: u.category } : {}) };
       });
     }
+    // Add/remove seats when seatCount changes
+    if (u.seatCount !== undefined) {
+      const rowSeats = next.seats.filter(s => s.rowId === rowId).sort((a,b) => a.number - b.number);
+      const diff = u.seatCount - rowSeats.length;
+      if (diff < 0) {
+        // Remove from end
+        const toRemove = new Set(rowSeats.slice(diff).map(s => s.id));
+        next.seats = next.seats.filter(s => !toRemove.has(s.id));
+      } else if (diff > 0 && rowSeats.length >= 2) {
+        // Add seats extending the row direction
+        const last = rowSeats[rowSeats.length - 1];
+        const prev = rowSeats[rowSeats.length - 2];
+        const dx = last.x - prev.x, dy = last.y - prev.y;
+        const newSeats = Array.from({ length: diff }, (_, i) => ({
+          ...last,
+          id: `seat-${rowId}-ext-${Date.now()}-${i}`,
+          number: last.number + i + 1,
+          label: `${last.label.replace(/\d+$/, '')}${last.number + i + 1}`,
+          x: last.x + dx * (i + 1),
+          y: last.y + dy * (i + 1),
+        }));
+        next.seats = [...next.seats, ...newSeats];
+      }
+    }
     // Re-space seats when seatSpacing changes
     if (u.seatSpacing !== undefined) {
       const rowSeats = next.seats.filter(s => s.rowId === rowId).sort((a,b) => a.number - b.number);
