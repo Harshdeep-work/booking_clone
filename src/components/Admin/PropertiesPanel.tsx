@@ -1,4 +1,5 @@
 'use client';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CATS, CAT_COLOR, type BShape, type BSeat, type BText, type Category, type SeatStatus } from './builderTypes2';
 
@@ -20,7 +21,7 @@ interface Props {
   onShape: (u: Partial<BShape>) => void;
   onSeat: (u: Partial<BSeat>) => void;
   onText: (u: Partial<BText>) => void;
-  onRow: (rowId: string, u: { label?: string; category?: Category }) => void;
+  onRow: (rowId: string, u: { label?: string; category?: Category; curveRadius?: number; seatSpacing?: number }) => void;
   onMultiCategory: (c: Category) => void;
   onMultiPrice: (p: number) => void;
   onMultiStatus: (s: SeatStatus) => void;
@@ -72,6 +73,9 @@ export default function PropertiesPanel(props: Props) {
   const { shape, seat, text, row, multiCount, onShape, onSeat, onText, onRow,
     onMultiCategory, onMultiPrice, onMultiStatus, onDelete, onFillSection, sectionMode,
     totalElements, totalSeats, totalSections, selectedCount } = props;
+
+  const [rowCurve, setRowCurve] = useState(0);
+  const [rowSpacing, setRowSpacing] = useState(5);
 
   const hasSelection = shape || seat || text || multiCount > 0;
 
@@ -307,30 +311,30 @@ export default function PropertiesPanel(props: Props) {
                 <div style={{ fontSize: 11, fontWeight: 700, color: '#0f172a', marginBottom: 10 }}>Row</div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <span style={{ fontSize: 12, color: '#475569' }}>Number of seats</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-2)' }}>Number of seats</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <button style={stepBtn}>−</button>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: '#0f172a', minWidth: 24, textAlign: 'center' }}>{row.seatCount}</span>
-                    <button style={stepBtn}>+</button>
+                    <button style={stepBtn} onClick={() => onRow(row.id, { seatSpacing: rowSpacing })}>−</button>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-1)', minWidth: 24, textAlign: 'center' }}>{row.seatCount}</span>
+                    <button style={stepBtn} onClick={() => onRow(row.id, { seatSpacing: rowSpacing })}>+</button>
                   </div>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <span style={{ fontSize: 12, color: '#475569' }}>Curve</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-2)' }}>Curve</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <button style={stepBtn}>−</button>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: '#0f172a', minWidth: 24, textAlign: 'center' }}>0°</span>
-                    <button style={stepBtn}>+</button>
+                    <button style={stepBtn} onClick={() => { const v = Math.max(-180, rowCurve - 15); setRowCurve(v); onRow(row.id, { curveRadius: v }); }}>−</button>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-1)', minWidth: 28, textAlign: 'center' }}>{rowCurve}°</span>
+                    <button style={stepBtn} onClick={() => { const v = Math.min(180, rowCurve + 15); setRowCurve(v); onRow(row.id, { curveRadius: v }); }}>+</button>
                   </div>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 12, color: '#475569' }}>Seat spacing</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-2)' }}>Seat spacing</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <button style={stepBtn}>−</button>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: '#0f172a', minWidth: 24, textAlign: 'center' }}>5</span>
-                    <button style={stepBtn}>+</button>
-                    <span style={{ fontSize: 10, color: '#94a3b8' }}>pt</span>
+                    <button style={stepBtn} onClick={() => { const v = Math.max(1, rowSpacing - 1); setRowSpacing(v); onRow(row.id, { seatSpacing: v }); }}>−</button>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-1)', minWidth: 24, textAlign: 'center' }}>{rowSpacing}</span>
+                    <button style={stepBtn} onClick={() => { const v = rowSpacing + 1; setRowSpacing(v); onRow(row.id, { seatSpacing: v }); }}>+</button>
+                    <span style={{ fontSize: 10, color: 'var(--text-3)' }}>pt</span>
                   </div>
                 </div>
               </div>

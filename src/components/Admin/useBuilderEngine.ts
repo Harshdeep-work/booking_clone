@@ -565,7 +565,7 @@ export function useBuilderEngine() {
     };
   })();
 
-  const updateRow = useCallback((rowId: string, u: { label?: string; category?: Category; seatCount?: number; sectionLabel?: string; rowLabelEnabled?: boolean }) => {
+  const updateRow = useCallback((rowId: string, u: { label?: string; category?: Category; seatCount?: number; sectionLabel?: string; rowLabelEnabled?: boolean; curveRadius?: number; seatSpacing?: number }) => {
     const next = { ...layoutRef.current };
     if (u.label !== undefined || u.category !== undefined) {
       next.seats = next.seats.map(s => {
@@ -574,6 +574,22 @@ export function useBuilderEngine() {
         const num = s.number;
         return { ...s, label: `${newLabel}${num}`, ...(u.category ? { category: u.category } : {}) };
       });
+    }
+    // Re-space seats when seatSpacing changes
+    if (u.seatSpacing !== undefined) {
+      const rowSeats = next.seats.filter(s => s.rowId === rowId).sort((a,b) => a.number - b.number);
+      if (rowSeats.length > 1) {
+        const dx = rowSeats[1].x - rowSeats[0].x;
+        const dy = rowSeats[1].y - rowSeats[0].y;
+        const len = Math.hypot(dx, dy) || 1;
+        const ux = dx / len, uy = dy / len;
+        const startX = rowSeats[0].x, startY = rowSeats[0].y;
+        next.seats = next.seats.map(s => {
+          if (s.rowId !== rowId) return s;
+          const idx = rowSeats.findIndex(r => r.id === s.id);
+          return { ...s, x: startX + ux * idx * u.seatSpacing!, y: startY + uy * idx * u.seatSpacing! };
+        });
+      }
     }
     commit(next, 'Edit row');
   }, [commit]);
