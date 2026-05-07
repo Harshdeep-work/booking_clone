@@ -46,7 +46,7 @@ export default function AdvancedToolsPanel({ layout, selectedSectionId, onApplyG
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleGenerateGrid = () => {
-    if (!selectedSectionId) { alert('Select a section first'); return; }
+    if (!selectedSectionId) return;
     const section = layout.shapes.find(s => s.id === selectedSectionId);
     if (!section) return;
     const xs = section.vertices.map(v => v[0]);
@@ -76,7 +76,7 @@ export default function AdvancedToolsPanel({ layout, selectedSectionId, onApplyG
     if (file.name.endsWith('.csv')) {
       const { seats, errors } = importFromCSV(text);
       if (errors.length > 0) {
-        alert(`Import errors:\n${errors.join('\n')}`);
+        console.warn('Import errors:', errors);
       }
       if (seats.length > 0) {
         onImport({ seats });
@@ -246,8 +246,7 @@ export default function AdvancedToolsPanel({ layout, selectedSectionId, onApplyG
 
             <button onClick={handleGenerateGrid} style={primaryBtn} disabled={!selectedSectionId}>
               {selectedSectionId ? 'Generate Seats' : 'Select a Section First'}
-            </button>
-          </div>
+            </button>          </div>
         )}
 
         {activeTab === 'tools' && (

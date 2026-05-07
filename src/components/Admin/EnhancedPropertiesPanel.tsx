@@ -177,7 +177,7 @@ export default function EnhancedPropertiesPanel({ selectedEntity, onUpdate, onUp
             />
           </div>
 
-          <div style={{ padding: 12, background: '#f8fafc', borderRadius: 8, fontSize: 11, color: '#475569' }}>
+          <div style={{ padding: 12, background: 'var(--bg)', borderRadius: 8, fontSize: 11, color: 'var(--text-2)' }}>
             <div style={{ fontWeight: 600, marginBottom: 4 }}>Row Stats:</div>
             <div>Seats: {(selectedEntity as BRow).seats.length}</div>
             <div>Avg Price: ${((selectedEntity as BRow).seats.reduce((sum, s) => sum + s.price, 0) / (selectedEntity as BRow).seats.length).toFixed(2)}</div>

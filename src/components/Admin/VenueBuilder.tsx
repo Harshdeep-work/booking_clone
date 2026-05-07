@@ -250,7 +250,11 @@ export default function VenueBuilder() {
         />
 
         {/* ── Canvas ────────────────────────────────────────────────────── */}
-        <div className="tf-canvas-wrap">
+        <div className="tf-canvas-wrap" style={viewMode === 'perspective' ? {
+          perspective: '800px',
+          backgroundImage: 'radial-gradient(circle, var(--border) 1px, transparent 1px)',
+          backgroundSize: '24px 24px',
+        } : undefined}>
           <BuilderCanvas
             layout={eng.layout}
             camera={eng.camera}
