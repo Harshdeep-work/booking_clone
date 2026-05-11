@@ -70,7 +70,6 @@ export function useBuilderEngine() {
   const [bgImage, setBgImage]     = useState<HTMLImageElement | null>(null);
   const [bgOpacity, setBgOpacity] = useState(0.5);
   const [venueName, setVenueName] = useState('Untitled Venue');
-  const [heatmap, setHeatmap]     = useState(false);
   const [rowSeatsCount, setRowSeatsCount] = useState(0); // 0 = auto
 
   // keep refs in sync
@@ -796,10 +795,10 @@ export function useBuilderEngine() {
     // state
     tool, snapOn, layout, selectedIds, sectionMode, camera, preview,
     history, zoomPct, bgImage, bgOpacity, venueName, cursor, counts,
-    selectedShape, selectedSeat, selectedText, selectedRow, heatmap,
+    selectedShape, selectedSeat, selectedText, selectedRow,
     // setters
     setSnapOn: (v: boolean) => { snapRef.current = v; setSnapOn(v); },
-    setVenueName, setBgImage, setBgOpacity, setHeatmap, rowSeatsCount, setRowSeatsCount,
+    setVenueName, setBgImage, setBgOpacity, rowSeatsCount, setRowSeatsCount,
     // handlers
     changeTool, onPointerDown, onPointerMove, onPointerUp, onDblClick, onWheel,
     updateShape, updateSeat, updateText, updateRow, deleteSelected, fillSection,

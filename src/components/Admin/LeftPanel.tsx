@@ -224,6 +224,7 @@ interface Props {
   onSnap: () => void;
   onInsertPreset: (patch: Partial<LayoutState>) => void;
   onDialog: (d: 'ring' | 'arc' | 'block') => void;
+  onOpenAdvanced: (tab: 'grid' | 'tools' | 'import' | 'validate') => void;
 }
 
 const SECTION_LABEL: React.CSSProperties = {
@@ -231,7 +232,7 @@ const SECTION_LABEL: React.CSSProperties = {
   letterSpacing: 1, padding: '10px 12px 4px', display: 'block',
 };
 
-export default function LeftPanel({ activeTool, onTool, snapOn, onSnap, onInsertPreset, onDialog }: Props) {
+export default function LeftPanel({ activeTool, onTool, snapOn, onSnap, onInsertPreset, onDialog, onOpenAdvanced }: Props) {
   return (
     <div style={{ width: 200, background: 'var(--panel)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', flexShrink: 0, overflowY: 'auto' }}>
 
@@ -280,6 +281,14 @@ export default function LeftPanel({ activeTool, onTool, snapOn, onSnap, onInsert
       <div style={{ borderTop: '1px solid var(--border-soft)' }}>
         <span style={SECTION_LABEL}>Generate</span>
         <div style={{ padding: '0 8px 8px' }}>
+          <button onClick={() => onOpenAdvanced('grid')}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '7px 10px', borderRadius: 8, border: 'none', marginBottom: 2, background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 12, fontWeight: 500, transition: 'all 0.1s', textAlign: 'left', fontFamily: 'inherit' }}
+            onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg)'}
+            onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = 'transparent'}
+          >
+            <span style={{ opacity: 0.6 }}>{icons.row}</span>
+            Rows & Seats
+          </button>
           {([
             { icon: 'ring' as const, label: 'Ring Sections', d: 'ring' as const },
             { icon: 'arc' as const,  label: 'Arc Section',   d: 'arc' as const },
@@ -292,6 +301,25 @@ export default function LeftPanel({ activeTool, onTool, snapOn, onSnap, onInsert
             >
               <span style={{ opacity: 0.6 }}>{icons[g.icon]}</span>
               {g.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Quick Inserts ── */}
+      <div style={{ borderTop: '1px solid var(--border-soft)' }}>
+        <span style={SECTION_LABEL}>Quick Inserts</span>
+        <div style={{ padding: '0 8px 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {SHAPE_INSERTS.map(s => (
+            <button key={s.id} onClick={() => onInsertPreset(s.build())}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border-soft)', background: 'var(--panel)', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}
+              onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--accent)'}
+              onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border-soft)'}
+            >
+              <span style={{ width: 22, height: 22, borderRadius: 6, background: s.bg, border: `1px solid ${s.border}`, color: s.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>
+                {s.icon}
+              </span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-1)' }}>{s.label}</span>
             </button>
           ))}
         </div>

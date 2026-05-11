@@ -146,7 +146,6 @@ VenueBuilder.tsx (Root)
 │   ├── Zoom Controls
 │   └── Action Buttons
 │       ├── [⚡ Advanced] ← NEW
-│       ├── [🔥 Heat Map]
 │       ├── [📜 History]
 │       └── [🖼️ Reference]
 │

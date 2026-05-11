@@ -19,10 +19,14 @@ interface Props {
   onMergeSections?: (ids: string[]) => void;
   onRotate?: (deg: number) => void;
   selectedIds?: Set<string>;
+  activeTab?: 'grid' | 'tools' | 'import' | 'validate';
+  onTabChange?: (tab: 'grid' | 'tools' | 'import' | 'validate') => void;
 }
 
-export default function AdvancedToolsPanel({ layout, selectedSectionId, onApplyGrid, onApplyTemplate, onImport, onExport, onValidate, onSplitSection, onMergeSections, onRotate, selectedIds }: Props) {
-  const [activeTab, setActiveTab] = useState<'grid' | 'tools' | 'import' | 'validate'>('grid');
+export default function AdvancedToolsPanel({ layout, selectedSectionId, onApplyGrid, onApplyTemplate, onImport, onExport, onValidate, onSplitSection, onMergeSections, onRotate, selectedIds, activeTab, onTabChange }: Props) {
+  const [localTab, setLocalTab] = useState<'grid' | 'tools' | 'import' | 'validate'>(activeTab ?? 'grid');
+  const tab = activeTab ?? localTab;
+  const setTab = onTabChange ?? setLocalTab;
   const [gridConfig, setGridConfig] = useState<GridConfig>({
     rows: 10,
     seatsPerRow: 20,
@@ -120,27 +124,27 @@ export default function AdvancedToolsPanel({ layout, selectedSectionId, onApplyG
     <div style={{ width: 320, background: 'var(--panel)', borderLeft: '1px solid var(--border)', display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Tabs */}
       <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg)', flexShrink: 0 }}>
-        {(['grid', 'tools', 'import', 'validate'] as const).map(tab => (
+        {(['grid', 'tools', 'import', 'validate'] as const).map(t => (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
+            key={t}
+            onClick={() => setTab(t)}
             style={{
               flex: 1, padding: '10px 4px', fontSize: 10, fontWeight: 600,
               textTransform: 'uppercase', letterSpacing: 0.5, border: 'none',
-              background: activeTab === tab ? 'var(--panel)' : 'transparent',
-              color: activeTab === tab ? 'var(--accent)' : 'var(--text-3)',
-              borderBottom: activeTab === tab ? `2px solid var(--accent)` : '2px solid transparent',
+              background: tab === t ? 'var(--panel)' : 'transparent',
+              color: tab === t ? 'var(--accent)' : 'var(--text-3)',
+              borderBottom: tab === t ? `2px solid var(--accent)` : '2px solid transparent',
               cursor: 'pointer', fontFamily: 'inherit',
             }}
           >
-            {tab === 'grid' ? 'Grid' : tab === 'tools' ? 'Tools' : tab === 'import' ? 'I/O' : 'Validate'}
+            {t === 'grid' ? 'Grid' : t === 'tools' ? 'Tools' : t === 'import' ? 'I/O' : 'Validate'}
           </button>
         ))}
       </div>
 
       {/* Content */}
       <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-        {activeTab === 'grid' && (
+        {tab === 'grid' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div>
               <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)', marginBottom: 12 }}>Seat Grid Generator</h3>
@@ -249,7 +253,7 @@ export default function AdvancedToolsPanel({ layout, selectedSectionId, onApplyG
             </button>          </div>
         )}
 
-        {activeTab === 'tools' && (
+        {tab === 'tools' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
             {/* Section Templates */}
@@ -322,7 +326,7 @@ export default function AdvancedToolsPanel({ layout, selectedSectionId, onApplyG
           </div>
         )}
 
-        {activeTab === 'import' && (
+        {tab === 'import' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div>
               <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)', marginBottom: 12 }}>Import / Export</h3>
@@ -359,7 +363,7 @@ export default function AdvancedToolsPanel({ layout, selectedSectionId, onApplyG
           </div>
         )}
 
-        {activeTab === 'validate' && (
+        {tab === 'validate' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div>
               <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)', marginBottom: 12 }}>Layout Validation</h3>

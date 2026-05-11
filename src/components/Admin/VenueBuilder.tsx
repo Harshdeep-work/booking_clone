@@ -3,7 +3,6 @@ import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import BuilderCanvas from './BuilderCanvas';
-import PropertiesPanel from './PropertiesPanel';
 import EnhancedPropertiesPanel from './EnhancedPropertiesPanel';
 import AdvancedToolsPanel from './AdvancedToolsPanel';
 import GenerateDialogs from './GenerateDialogs';
@@ -26,7 +25,7 @@ export default function VenueBuilder() {
   const [showHistory, setShowHistory]         = useState(false);
   const [showEmpty, setShowEmpty]             = useState(true);
   const [showAdvancedTools, setShowAdvancedTools] = useState(false);
-  const [useEnhancedProps, setUseEnhancedProps]   = useState(true);
+  const [advancedTab, setAdvancedTab]         = useState<'grid' | 'tools' | 'import' | 'validate'>('grid');
   const [rightTab, setRightTab]               = useState<'design'|'data'|'ai'>('design');
   const [aiInput, setAiInput]                 = useState('');
   const [aiMessages, setAiMessages]           = useState<{role:'user'|'assistant';text:string}[]>([
@@ -50,6 +49,11 @@ export default function VenueBuilder() {
   const handleInsertPreset = (patch: Partial<LayoutState>) => {
     eng.applyGeneratedLayout(patch);
     setShowEmpty(false);
+  };
+
+  const openAdvanced = (tab: 'grid' | 'tools' | 'import' | 'validate') => {
+    setAdvancedTab(tab);
+    setShowAdvancedTools(true);
   };
 
   const handleApplyGrid = (_sectionId: string, rows: any[], seats: any[]) => {
@@ -185,10 +189,6 @@ export default function VenueBuilder() {
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1l1.2 2.5 2.8.4-2 2 .5 2.8L6 7.4 3.5 8.7l.5-2.8-2-2 2.8-.4L6 1z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
             Advanced
           </button>
-          <button className={`tf-chip-btn${eng.heatmap?' active':''}`} onClick={() => eng.setHeatmap(!eng.heatmap)}>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4" stroke="currentColor" strokeWidth="1.4"/><circle cx="6" cy="6" r="2" stroke="currentColor" strokeWidth="1.2"/></svg>
-            Heat Map
-          </button>
           <button className={`tf-chip-btn${showHistory?' active':''}`} onClick={() => setShowHistory(h => !h)}>
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/><path d="M6 3.5V6l2 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
             History
@@ -247,6 +247,7 @@ export default function VenueBuilder() {
           onSnap={() => eng.setSnapOn(!eng.snapOn)}
           onInsertPreset={handleInsertPreset}
           onDialog={setDialog}
+          onOpenAdvanced={openAdvanced}
         />
 
         {/* ── Canvas ────────────────────────────────────────────────────── */}
@@ -259,12 +260,11 @@ export default function VenueBuilder() {
             layout={eng.layout}
             camera={eng.camera}
             preview={eng.preview}
-            selectedIds={eng.selectedIds}
-            sectionMode={eng.sectionMode}
-            bgImage={eng.bgImage}
-            bgOpacity={eng.bgOpacity}
-            heatmap={eng.heatmap}
-            onCamera={() => {}}
+              selectedIds={eng.selectedIds}
+              sectionMode={eng.sectionMode}
+              bgImage={eng.bgImage}
+              bgOpacity={eng.bgOpacity}
+              onCamera={() => {}}
             onPointerDown={eng.onPointerDown}
             onPointerMove={eng.onPointerMove}
             onPointerUp={eng.onPointerUp}
@@ -339,42 +339,15 @@ export default function VenueBuilder() {
                 {t === 'design' ? 'Design' : t === 'data' ? 'Data' : 'AI'}
               </button>
             ))}
-            <button className="tf-panel-tab" style={{marginLeft:'auto'}} onClick={() => setUseEnhancedProps(u => !u)}>
-              {useEnhancedProps ? 'Classic' : 'Enhanced'}
-            </button>
           </div>
 
           {rightTab === 'design' && (
             <div className="tf-panel-body">
-              {useEnhancedProps ? (
-                <EnhancedPropertiesPanel
-                  selectedEntity={getSelectedEntity()}
-                  onUpdate={handleEntityUpdate}
-                  onUploadPhoto={handleUploadPhoto}
-                />
-              ) : (
-                <PropertiesPanel
-                  shape={eng.selectedShape}
-                  seat={eng.selectedSeat}
-                  text={eng.selectedText}
-                  row={eng.selectedRow}
-                  multiCount={eng.selectedIds.size}
-                  onShape={eng.updateShape}
-                  onSeat={eng.updateSeat}
-                  onText={eng.updateText}
-                  onRow={eng.updateRow}
-                  onMultiCategory={c => eng.multiUpdate(c)}
-                  onMultiPrice={p => eng.multiUpdate(undefined, p)}
-                  onMultiStatus={s => eng.multiUpdate(undefined, undefined, s)}
-                  onDelete={eng.deleteSelected}
-                  onFillSection={eng.fillSection}
-                  sectionMode={eng.sectionMode}
-                  totalElements={eng.layout.shapes.length + eng.layout.seats.length + eng.layout.texts.length}
-                  totalSeats={eng.layout.seats.length}
-                  totalSections={eng.counts.sections}
-                  selectedCount={eng.selectedIds.size}
-                />
-              )}
+              <EnhancedPropertiesPanel
+                selectedEntity={getSelectedEntity()}
+                onUpdate={handleEntityUpdate}
+                onUploadPhoto={handleUploadPhoto}
+              />
             </div>
           )}
 
@@ -452,6 +425,8 @@ export default function VenueBuilder() {
                 onSplitSection={eng.splitSection}
                 onMergeSections={eng.mergeSections}
                 onRotate={eng.rotateSelected}
+                activeTab={advancedTab}
+                onTabChange={setAdvancedTab}
               />
             </motion.div>
           )}

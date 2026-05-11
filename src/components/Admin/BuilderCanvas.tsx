@@ -21,7 +21,6 @@ interface Props {
   sectionMode: string | null;   // id of section being edited inside
   bgImage: HTMLImageElement | null;
   bgOpacity: number;
-  heatmap: boolean;
   onCamera: (c: Camera) => void;
   onPointerDown: (wx: number, wy: number, sx: number, sy: number, e: PointerEvent) => void;
   onPointerMove: (wx: number, wy: number, sx: number, sy: number, e: PointerEvent) => void;
@@ -36,6 +35,45 @@ interface Props {
 const FONT = "'Inter',system-ui,sans-serif";
 const GRID = 20;
 
+function hexToRgb(hex: string): [number, number, number] | null {
+  const raw = hex.replace('#', '').trim();
+  if (raw.length === 3) {
+    const r = parseInt(raw[0] + raw[0], 16);
+    const g = parseInt(raw[1] + raw[1], 16);
+    const b = parseInt(raw[2] + raw[2], 16);
+    if ([r, g, b].some(n => Number.isNaN(n))) return null;
+    return [r, g, b];
+  }
+  if (raw.length === 6) {
+    const r = parseInt(raw.slice(0, 2), 16);
+    const g = parseInt(raw.slice(2, 4), 16);
+    const b = parseInt(raw.slice(4, 6), 16);
+    if ([r, g, b].some(n => Number.isNaN(n))) return null;
+    return [r, g, b];
+  }
+  return null;
+}
+
+function darken(hex: string, amount = 0.2): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return hex;
+  const factor = 1 - amount;
+  const [r, g, b] = rgb;
+  return `rgb(${Math.round(r * factor)},${Math.round(g * factor)},${Math.round(b * factor)})`;
+}
+
+function withAlpha(hex: string, alpha: number): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return hex;
+  const [r, g, b] = rgb;
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function isCustomShapeColor(shape: BShape): boolean {
+  const catCol = CAT_COLOR[shape.category];
+  return !!shape.color && !!catCol && shape.color.toLowerCase() !== catCol.toLowerCase();
+}
+
 export function w2s(wx: number, wy: number, cam: Camera, W: number, H: number): [number, number] {
   return [(wx - cam.x) * cam.zoom + W / 2, (wy - cam.y) * cam.zoom + H / 2];
 }
@@ -44,7 +82,7 @@ export function s2w(sx: number, sy: number, cam: Camera, W: number, H: number): 
 }
 
 export default function BuilderCanvas(props: Props) {
-  const { layout, camera, preview, selectedIds, sectionMode, bgImage, bgOpacity, heatmap,
+  const { layout, camera, preview, selectedIds, sectionMode, bgImage, bgOpacity,
     onPointerDown, onPointerMove, onPointerUp, onDblClick, onWheel,
     canvasRef, containerRef, cursor } = props;
 
@@ -56,7 +94,6 @@ export default function BuilderCanvas(props: Props) {
   const secModeRef = useRef(sectionMode);
   const bgRef = useRef(bgImage);
   const bgOpRef = useRef(bgOpacity);
-  const heatmapRef = useRef(heatmap);
 
   useEffect(() => { layoutRef.current = layout; }, [layout]);
   useEffect(() => { camRef.current = camera; }, [camera]);
@@ -65,7 +102,6 @@ export default function BuilderCanvas(props: Props) {
   useEffect(() => { secModeRef.current = sectionMode; }, [sectionMode]);
   useEffect(() => { bgRef.current = bgImage; }, [bgImage]);
   useEffect(() => { bgOpRef.current = bgOpacity; }, [bgOpacity]);
-  useEffect(() => { heatmapRef.current = heatmap; }, [heatmap]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current; if (!canvas) return;
@@ -76,7 +112,6 @@ export default function BuilderCanvas(props: Props) {
     const sel = selRef.current;
     const secMode = secModeRef.current;
     const pv = previewRef.current;
-    const hm = heatmapRef.current;
 
     ctx.clearRect(0, 0, W, H);
 
@@ -207,42 +242,49 @@ export default function BuilderCanvas(props: Props) {
 
       // ── Special shapes ────────────────────────────────────────────────────
       if (shape.type === 'stage') {
-        ctx.fillStyle='#e2e8f0'; ctx.fill(); ctx.strokeStyle='#94a3b8'; ctx.lineWidth=1.5; ctx.stroke();
+        const fill = shape.color || '#e2e8f0';
+        ctx.fillStyle=fill; ctx.fill(); ctx.strokeStyle=isSel ? '#2563eb' : darken(fill, 0.25); ctx.lineWidth=1.5; ctx.stroke();
         const [lxS,lyS]=w2s(shape.cx,shape.cy,cam,W,H);
         ctx.fillStyle='#64748b'; ctx.font=`bold ${Math.max(7,9*cam.zoom)}px ${FONT}`;
         ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('STAGE',lxS,lyS);
         ctx.restore(); return;
       }
       if (shape.type === 'suite') {
-        ctx.fillStyle='#fef3c7'; ctx.fill(); ctx.strokeStyle=isSel?'#2563eb':'#d97706'; ctx.lineWidth=isSel?2:1; ctx.stroke();
+        const fill = shape.color || '#fef3c7';
+        ctx.fillStyle=fill; ctx.fill(); ctx.strokeStyle=isSel ? '#2563eb' : darken(fill, 0.25); ctx.lineWidth=isSel?2:1; ctx.stroke();
         const [lxS,lyS]=w2s(shape.cx,shape.cy,cam,W,H);
         ctx.fillStyle='#92400e'; ctx.font=`bold ${Math.max(6,7*cam.zoom)}px ${FONT}`;
         ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(shape.label,lxS,lyS);
         ctx.restore(); return;
       }
       if (shape.type === 'pressbox') {
-        ctx.fillStyle='#f0f9ff'; ctx.fill(); ctx.strokeStyle=isSel?'#2563eb':'#0284c7'; ctx.lineWidth=1.5; ctx.stroke();
+        const fill = shape.color || '#f0f9ff';
+        ctx.fillStyle=fill; ctx.fill(); ctx.strokeStyle=isSel ? '#2563eb' : darken(fill, 0.25); ctx.lineWidth=1.5; ctx.stroke();
         const [lxS,lyS]=w2s(shape.cx,shape.cy,cam,W,H);
         ctx.fillStyle='#0369a1'; ctx.font=`bold ${Math.max(6,7*cam.zoom)}px ${FONT}`;
         ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('PRESS',lxS,lyS);
         ctx.restore(); return;
       }
       if (shape.type === 'scoreboard') {
-        ctx.fillStyle='#1e293b'; ctx.fill(); ctx.strokeStyle=isSel?'#2563eb':'#f59e0b'; ctx.lineWidth=1.5; ctx.stroke();
+        const fill = shape.color || '#1e293b';
+        ctx.fillStyle=fill; ctx.fill(); ctx.strokeStyle=isSel ? '#2563eb' : darken(fill, 0.25); ctx.lineWidth=1.5; ctx.stroke();
         const [lxS,lyS]=w2s(shape.cx,shape.cy,cam,W,H);
         ctx.font=`${Math.max(8,10*cam.zoom)}px ${FONT}`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('📺',lxS,lyS);
         ctx.restore(); return;
       }
       if (shape.type === 'tunnel') {
-        ctx.fillStyle='#f1f5f9'; ctx.fill(); ctx.strokeStyle=isSel?'#2563eb':'#94a3b8'; ctx.lineWidth=1; ctx.setLineDash([3,2]); ctx.stroke(); ctx.setLineDash([]);
+        const fill = shape.color || '#f1f5f9';
+        ctx.fillStyle=fill; ctx.fill(); ctx.strokeStyle=isSel ? '#2563eb' : darken(fill, 0.2); ctx.lineWidth=1; ctx.setLineDash([3,2]); ctx.stroke(); ctx.setLineDash([]);
         ctx.restore(); return;
       }
       if (shape.type === 'concourse') {
-        ctx.fillStyle='rgba(241,245,249,0.5)'; ctx.fill(); ctx.strokeStyle='#e2e8f0'; ctx.lineWidth=1; ctx.setLineDash([5,3]); ctx.stroke(); ctx.setLineDash([]);
+        const fill = shape.color || '#f1f5f9';
+        ctx.fillStyle=withAlpha(fill, 0.5); ctx.fill(); ctx.strokeStyle=darken(fill, 0.2); ctx.lineWidth=1; ctx.setLineDash([5,3]); ctx.stroke(); ctx.setLineDash([]);
         ctx.restore(); return;
       }
       if (shape.type === 'ada') {
-        ctx.fillStyle='#eff6ff'; ctx.fill(); ctx.strokeStyle=isSel?'#2563eb':'#3b82f6'; ctx.lineWidth=1; ctx.setLineDash([2,2]); ctx.stroke(); ctx.setLineDash([]);
+        const fill = shape.color || '#eff6ff';
+        ctx.fillStyle=fill; ctx.fill(); ctx.strokeStyle=isSel ? '#2563eb' : darken(fill, 0.2); ctx.lineWidth=1; ctx.setLineDash([2,2]); ctx.stroke(); ctx.setLineDash([]);
         const [lxS,lyS]=w2s(shape.cx,shape.cy,cam,W,H);
         ctx.font=`${Math.max(8,9*cam.zoom)}px ${FONT}`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('♿',lxS,lyS);
         ctx.restore(); return;
@@ -250,8 +292,10 @@ export default function BuilderCanvas(props: Props) {
 
       // ── Seating section — TickPick style ──────────────────────────────────
       const cat = shape.category as string;
-      const fillCol  = hm ? (() => { /* heatmap */ const minP=seats.filter(s=>s.sectionId===shape.id).reduce((a,s)=>Math.min(a,s.price),Infinity); if(minP===Infinity) return '#e2e8f0'; const hmMin2=Math.min(...shapes.map(sh=>seats.filter(s=>s.sectionId===sh.id).reduce((a,s)=>Math.min(a,s.price),Infinity)).filter(v=>v!==Infinity)); const hmMax2=Math.max(...shapes.map(sh=>seats.filter(s=>s.sectionId===sh.id).reduce((a,s)=>Math.min(a,s.price),Infinity)).filter(v=>v!==Infinity)); const t=(minP-hmMin2)/(hmMax2-hmMin2||1); const r=Math.round(16+t*(239-16)),g=Math.round(185-t*(185-68)),b=Math.round(129-t*(129-68)); return `rgb(${r},${g},${b})`; })() : (TIER_FILL[cat] || '#e2e8f0');
-      const strokeCol = isSel ? '#2563eb' : (TIER_STROKE[cat] || '#94a3b8');
+      const customFill = isCustomShapeColor(shape) ? shape.color : null;
+      const secSeats = seats.filter(s => s.sectionId === shape.id);
+      const fillCol = customFill || TIER_FILL[cat] || '#e2e8f0';
+      const strokeCol = isSel ? '#2563eb' : (customFill ? darken(customFill, 0.25) : (TIER_STROKE[cat] || '#94a3b8'));
       const rowCol    = TIER_ROW[cat] || '#cbd5e1';
 
       // Section fill
@@ -260,7 +304,6 @@ export default function BuilderCanvas(props: Props) {
 
       // ── Row stripes inside section (TickPick's key visual) ────────────────
       // Get rows for this section, draw as horizontal-ish stripes clipped to shape
-      const secSeats = seats.filter(s => s.sectionId === shape.id);
       if (secSeats.length > 0 && cam.zoom > 0.4) {
         // Group by rowId
         const rowMap = new Map<string, typeof secSeats>();
