@@ -699,7 +699,7 @@ export default function BuilderCanvas(props: Props) {
     }
 
     // ── Hover Tooltip ────────────────────────────────────────────────────────
-    if (tool === 'select' && !isPanning.current && !isDragging.current) {
+    if (tool === 'select') {
       const { seats } = layoutRef.current;
       const hoverSeat = seats.find(s => {
         if (secMode && s.sectionId !== secMode) return false;

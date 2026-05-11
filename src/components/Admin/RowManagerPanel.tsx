@@ -291,7 +291,7 @@ function RowItem({ rowId, rowLabel, seats, expanded, selectedSeatId, onToggle, o
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 export default function RowManagerPanel({
-  layout, selectedSectionId, onAddRow, onDeleteRow, onUpdateRow, onSelectSeat, selectedSeatId,
+  layout, selectedSectionId, onAddRow, onDeleteRow, onDuplicateRow, onUpdateRow, onSelectSeat, selectedSeatId,
 }: Props) {
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
