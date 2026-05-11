@@ -31,6 +31,25 @@ export interface GridConfig {
   basePrice: number;
 }
 
+// Converts a 0-based row index to a label starting from startRow (e.g. 'A', 'B', ..., 'Z', 'AA', 'AB', ...)
+function rowIndexToLabel(startRow: string, index: number): string {
+  const base = 26;
+  // Convert startRow to a 0-based offset
+  let startOffset = 0;
+  for (let i = 0; i < startRow.length; i++) {
+    startOffset = startOffset * base + (startRow.charCodeAt(i) - 65 + 1);
+  }
+  startOffset -= 1; // make 0-based
+  let n = startOffset + index + 1; // 1-based
+  let label = '';
+  while (n > 0) {
+    const rem = (n - 1) % base;
+    label = String.fromCharCode(65 + rem) + label;
+    n = Math.floor((n - 1) / base);
+  }
+  return label;
+}
+
 export function generateSeatGrid(
   sectionId: string,
   bounds: { x0: number; y0: number; x1: number; y1: number },
@@ -38,45 +57,74 @@ export function generateSeatGrid(
 ): { rows: BRow[]; seats: BSeat[] } {
   const { rows, seatsPerRow, rowSpacing, seatSpacing, curveRadius, aisleAfter, vomitoryAfter, adaEvery, premiumSpacing, startRow, startNumber, numberScheme, category, basePrice } = config;
   const spacing = premiumSpacing ? seatSpacing * 1.2 : seatSpacing;
-  
+
   const outRows: BRow[] = [];
   const outSeats: BSeat[] = [];
-  
-  const totalHeight = bounds.y1 - bounds.y0;
+
+  const cx = (bounds.x0 + bounds.x1) / 2;
   const totalWidth = bounds.x1 - bounds.x0;
-  
+
+  // Build cumulative row Y positions respecting rowSpacing and vomitory gaps
+  let currentY = bounds.y0;
+  const rowYs: number[] = [];
   for (let r = 0; r < rows; r++) {
-    const rowLabel = String.fromCharCode(startRow.charCodeAt(0) + r);
+    if (r > 0) {
+      currentY += rowSpacing;
+      if (vomitoryAfter?.includes(r - 1)) currentY += rowSpacing * 2;
+    }
+    rowYs.push(currentY);
+  }
+
+  for (let r = 0; r < rows; r++) {
+    const rowLabel = rowIndexToLabel(startRow, r);
     const rowId = `row-${sectionId}-${r}`;
-    // vomitory gap: extra row spacing after certain rows
-    const vomBefore = vomitoryAfter?.includes(r) ? rowSpacing * 2 : 0;
-    const rowY = bounds.y0 + (r + 0.5) * (totalHeight / rows) + vomBefore;
-    
+    const baseRowY = rowYs[r];
+
+    // For curved rows: each row sits on a circle of radius (curveRadius + r * rowSpacing)
+    // so inner rows have tighter curve, outer rows have wider curve — realistic stadium arc
+    const effectiveRadius = curveRadius ? curveRadius + r * rowSpacing : 0;
+
     const rowSeats: BSeat[] = [];
     let seatNum = startNumber;
-    
+
     for (let s = 0; s < seatsPerRow; s++) {
       const isAisle = aisleAfter?.includes(s);
       const isADA = adaEvery && adaEvery > 0 && s % adaEvery === 0;
-      
+
       let x: number, y: number;
-      
-      if (curveRadius) {
-        const angle = ((s / (seatsPerRow - 1)) - 0.5) * (totalWidth / curveRadius);
-        x = bounds.x0 + totalWidth / 2 + Math.sin(angle) * curveRadius;
-        y = rowY + (1 - Math.cos(angle)) * Math.abs(curveRadius) * 0.3;
+
+      if (effectiveRadius) {
+        // Arc: seats spread along an arc centered below the section
+        // t goes from -0.5 to +0.5 across the row
+        const t = seatsPerRow > 1 ? (s / (seatsPerRow - 1)) - 0.5 : 0;
+        // half-angle subtended by the row width on the circle
+        const halfAngle = totalWidth / (2 * effectiveRadius);
+        const angle = t * halfAngle * 2; // angle from center (0 = straight ahead)
+        x = cx + Math.sin(angle) * effectiveRadius;
+        // y: arc center is below the row; seats curve upward at edges
+        const arcCenterY = baseRowY + effectiveRadius;
+        y = arcCenterY - Math.cos(angle) * effectiveRadius;
       } else {
         x = bounds.x0 + (s + 0.5) * (totalWidth / seatsPerRow);
-        y = rowY;
+        y = baseRowY;
       }
-      
-      if (isAisle) x += spacing * 2;
-      
-      let num = seatNum;
-      if (numberScheme === 'odd') num = seatNum * 2 - 1;
-      else if (numberScheme === 'even') num = seatNum * 2;
-      else if (numberScheme === 'rtl') num = startNumber + seatsPerRow - seatNum;
-      
+
+      if (isAisle) x += spacing * 0.5;
+
+      // Seat numbering
+      let num: number;
+      const idx = s; // 0-based seat index within row
+      if (numberScheme === 'odd') {
+        num = startNumber + idx * 2 - 1;
+      } else if (numberScheme === 'even') {
+        num = startNumber + idx * 2;
+      } else if (numberScheme === 'rtl') {
+        num = startNumber + (seatsPerRow - 1 - idx);
+      } else {
+        // sequential '1,2,3'
+        num = startNumber + idx;
+      }
+
       rowSeats.push({
         id: `seat-${rowId}-${s}`,
         rowId,
@@ -90,14 +138,14 @@ export function generateSeatGrid(
         aisleGap: isAisle,
         isAccessible: !!isADA,
       });
-      
+
       seatNum++;
     }
-    
-    outRows.push({ id: rowId, sectionId, label: rowLabel, category, seats: rowSeats, curveRadius });
+
+    outRows.push({ id: rowId, sectionId, label: rowLabel, category, seats: rowSeats, curveRadius: effectiveRadius || undefined });
     outSeats.push(...rowSeats);
   }
-  
+
   return { rows: outRows, seats: outSeats };
 }
 

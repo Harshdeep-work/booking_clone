@@ -1,4 +1,4 @@
-export type Tool = 'select' | 'polygon' | 'rect' | 'ellipse' | 'ring' | 'arc' | 'seat' | 'row' | 'fill' | 'pan';
+export type Tool = 'select' | 'polygon' | 'rect' | 'ellipse' | 'ring' | 'arc' | 'seat' | 'row' | 'fill' | 'pan' | 'element';
 export type Category = 'FIELD' | 'PLATINUM' | 'GOLD' | 'SILVER' | 'BRONZE' | 'GENERAL';
 export type SeatStatus = 'available' | 'sold' | 'locked';
 
@@ -34,6 +34,19 @@ export interface BuilderSeat {
   category: Category;
 }
 
+export interface BuilderElement {
+  id: string;
+  type: 'rect' | 'text';
+  label: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  fontSize: number;
+  color: string;
+  bg: string;
+}
+
 export interface ValidationError {
   type: 'duplicate_id' | 'overlap' | 'spacing';
   message: string;
@@ -46,6 +59,7 @@ export interface LayoutSnapshot {
   timestamp: number;
   sections: BuilderSection[];
   seats: BuilderSeat[];
+  elements: BuilderElement[];
 }
 
 export function arcPoly(

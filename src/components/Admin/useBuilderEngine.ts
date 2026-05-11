@@ -92,6 +92,21 @@ export function useBuilderEngine() {
     setSelIds(new Set(ids));
   }, []);
 
+  const selectEntity = useCallback((id: string, multi = false) => {
+    if (multi) {
+      const next = new Set(selRef.current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      syncSel(next);
+    } else {
+      syncSel(new Set([id]));
+    }
+  }, [syncSel]);
+
+  const clearSelection = useCallback(() => {
+    syncSel(new Set());
+  }, [syncSel]);
+
   const sw = useCallback((wx: number, wy: number): [number, number] => {
     const g = snapRef.current ? GRID : 1;
     return [snapVal(wx, g), snapVal(wy, g)];
@@ -564,7 +579,105 @@ export function useBuilderEngine() {
     };
   })();
 
-  const updateRow = useCallback((rowId: string, u: { label?: string; category?: Category; seatCount?: number; sectionLabel?: string; rowLabelEnabled?: boolean; curveRadius?: number; seatSpacing?: number }) => {
+  // ── Add row (panel-driven, auto-positions below last row) ───────────────────
+  const addRow = useCallback((sectionId: string, rowLabel: string, seatCount: number, price: number, category: Category) => {
+    // Find the section shape to determine width
+    const shape = layoutRef.current.shapes.find(s => s.id === sectionId);
+    const existingSeats = layoutRef.current.seats.filter(s => s.sectionId === sectionId);
+
+    // Determine X extents from section shape or existing seats
+    let x0 = -60, x1 = 60, baseY = 0;
+    if (shape && shape.vertices.length > 0) {
+      const xs = shape.vertices.map(v => v[0]);
+      const ys = shape.vertices.map(v => v[1]);
+      x0 = Math.min(...xs) + 8;
+      x1 = Math.max(...xs) - 8;
+      baseY = Math.min(...ys) + 8;
+    }
+
+    // Find the lowest Y of existing rows in this section
+    if (existingSeats.length > 0) {
+      const maxY = Math.max(...existingSeats.map(s => s.y));
+      baseY = maxY + 14; // 14 world units row spacing
+    }
+
+    const rowId = `row-${sectionId}-${uid()}`;
+    const newSeats: BSeat[] = Array.from({ length: seatCount }, (_, i) => {
+      const t = seatCount === 1 ? 0.5 : i / (seatCount - 1);
+      const x = x0 + t * (x1 - x0);
+      return {
+        id: `seat-${rowId}-${i}`,
+        rowId,
+        sectionId,
+        number: i + 1,
+        label: `${rowLabel}${i + 1}`,
+        x, y: baseY,
+        price,
+        status: 'available' as const,
+        category,
+      };
+    });
+
+    const next: LayoutState = {
+      ...layoutRef.current,
+      seats: [...layoutRef.current.seats, ...newSeats],
+    };
+    commit(next, `Add row ${rowLabel}`);
+  }, [commit]);
+
+  // ── Delete entire row (all seats with this rowId) ──────────────────────────
+  // ── Duplicate entire row ──────────────────────────────────────────────────
+  const duplicateRow = useCallback((sourceRowId: string) => {
+    const sourceSeats = layoutRef.current.seats.filter(s => s.rowId === sourceRowId).sort((a,b) => a.number - b.number);
+    if (sourceSeats.length === 0) return;
+
+    const sectionId = sourceSeats[0].sectionId;
+    const existingLabels = layoutRef.current.seats.filter(s => s.sectionId === sectionId).map(s => s.label.replace(/\d+$/, ''));
+    const sourceLabel = sourceSeats[0].label.replace(/\d+$/, '');
+
+    // Refined incrementer inside duplicate too
+    const increment = (s: string): string => {
+      const chars = s.split('');
+      for (let i = chars.length - 1; i >= 0; i--) {
+        if (chars[i] < 'Z') {
+          chars[i] = String.fromCharCode(chars[i].charCodeAt(0) + 1);
+          return chars.join('');
+        }
+        chars[i] = 'A';
+      }
+      return 'A' + chars.join('');
+    };
+    const nextLabel = increment(sourceLabel);
+
+    const newRowId = `row-${sectionId}-${uid()}`;
+    const newSeats: BSeat[] = sourceSeats.map(s => ({
+      ...s,
+      id: `seat-${newRowId}-${s.number}`,
+      rowId: newRowId,
+      label: `${nextLabel}${s.number}`,
+      y: s.y + 14, // shift down by one row spacing
+    }));
+
+    const next: LayoutState = {
+      ...layoutRef.current,
+      seats: [...layoutRef.current.seats, ...newSeats],
+    };
+    commit(next, `Duplicate row ${sourceLabel} → ${nextLabel}`);
+  }, [commit]);
+
+  const deleteRow = useCallback((rowId: string) => {
+    const next: LayoutState = {
+      ...layoutRef.current,
+      seats: layoutRef.current.seats.filter(s => s.rowId !== rowId),
+      rows: layoutRef.current.rows.filter(r => r.id !== rowId),
+    };
+    commit(next, 'Delete row');
+    // Clear selection if a deleted seat was selected
+    const deletedIds = layoutRef.current.seats.filter(s => s.rowId === rowId).map(s => s.id);
+    syncSel(new Set([...selRef.current].filter(id => !deletedIds.includes(id))));
+  }, [commit, syncSel]);
+
+  const updateRow = useCallback((rowId: string, u: { label?: string; category?: Category; seatCount?: number; sectionLabel?: string; rowLabelEnabled?: boolean; curveRadius?: number; seatSpacing?: number; price?: number }) => {
     const next = { ...layoutRef.current };
     if (u.label !== undefined || u.category !== undefined) {
       next.seats = next.seats.map(s => {
@@ -613,6 +726,12 @@ export function useBuilderEngine() {
           return { ...s, x: startX + ux * idx * u.seatSpacing!, y: startY + uy * idx * u.seatSpacing! };
         });
       }
+    }
+    // Update price for all seats in the row
+    if (u.price !== undefined) {
+      next.seats = next.seats.map(s =>
+        s.rowId === rowId ? { ...s, price: u.price! } : s
+      );
     }
     commit(next, 'Edit row');
   }, [commit]);
@@ -802,6 +921,7 @@ export function useBuilderEngine() {
     // handlers
     changeTool, onPointerDown, onPointerMove, onPointerUp, onDblClick, onWheel,
     updateShape, updateSeat, updateText, updateRow, deleteSelected, fillSection,
+    addRow, deleteRow, duplicateRow, selectEntity, clearSelection,
     applyGeneratedLayout, multiUpdate, exitSectionMode,
     splitSection, mergeSections, rotateSelected,
     undo, redo, zoomIn, zoomOut,

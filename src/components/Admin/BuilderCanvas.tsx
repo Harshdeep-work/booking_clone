@@ -427,57 +427,86 @@ export default function BuilderCanvas(props: Props) {
           const [px, py] = w2s(v[0], v[1], cam, W, H);
           ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI*2);
           ctx.fillStyle = '#fff'; ctx.fill();
-          ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 2; ctx.stroke();
+          ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 2;
+          ctx.stroke();
         });
       }
     });
 
-    // ── Row numbers at mid-zoom (TickPick shows row numbers on section edges) ─
-    if (cam.zoom >= 1.2 && !secMode) {
-      const rowMap = new Map<string, { x: number; y: number; label: string; first: boolean }[]>();
+    // ── Row labels at edge of each row (BookMyShow style) ─────────────────────
+    if (cam.zoom >= 0.8) {
+      const rowMap = new Map<string, { x: number; y: number; rowLabel: string; number: number }[]>();
       seats.forEach(s => {
         if (!s.rowId) return;
         if (!rowMap.has(s.rowId)) rowMap.set(s.rowId, []);
-        const arr = rowMap.get(s.rowId)!;
-        arr.push({ x: s.x, y: s.y, label: s.label.replace(/[^0-9]/g, '') || s.label, first: s.number === 1 });
+        rowMap.get(s.rowId)!.push({
+          x: s.x, y: s.y,
+          rowLabel: s.label.replace(/\d+$/, ''),
+          number: s.number,
+        });
       });
+
+      const fontSize = Math.max(7, Math.min(13, 9 * cam.zoom));
       ctx.save();
-      ctx.font = `${Math.max(6, 7 * cam.zoom)}px ${FONT}`;
-      ctx.fillStyle = '#94a3b8';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       rowMap.forEach((pts) => {
-        // Draw row number at first seat position
-        const first = pts.find(p => p.first) || pts[0];
-        if (!first) return;
-        const [px, py] = w2s(first.x, first.y, cam, W, H);
-        const rowNum = first.label.replace(/[A-Z]/g, '');
-        if (rowNum) ctx.fillText(rowNum, px - 8 * cam.zoom, py);
+        if (pts.length === 0) return;
+        pts.sort((a, b) => a.x - b.x);
+        const leftSeat  = pts[0];
+        const rightSeat = pts[pts.length - 1];
+        const rowLetter = leftSeat.rowLabel;
+        if (!rowLetter) return;
+
+        const [lx, ly] = w2s(leftSeat.x,  leftSeat.y,  cam, W, H);
+        const [rx]     = w2s(rightSeat.x, rightSeat.y, cam, W, H);
+        const pad = Math.max(10, 14 * cam.zoom);
+
+        ctx.font = `700 ${fontSize}px ${FONT}`;
+        ctx.fillStyle = '#64748b';
+        ctx.textBaseline = 'middle';
+
+        // Left label
+        ctx.textAlign = 'right';
+        ctx.fillText(rowLetter, lx - pad * 0.35, ly);
+
+        // Right label
+        ctx.textAlign = 'left';
+        ctx.fillText(rowLetter, rx + pad * 0.35, ly);
       });
       ctx.restore();
     }
 
-    // ── Individual seat circles (shown in section-edit mode or at high zoom) ──
+    // ── Individual seat circles (shown in section-edit mode or at zoom ≥ 1.5) ───
     {
-      const showSeats = secMode || cam.zoom >= 2.5;
+      const showSeats = secMode || cam.zoom >= 1.5;
       if (showSeats) {
-        const r = Math.max(4, Math.min(12, 8 * cam.zoom));
-        const fontSize = Math.max(5, Math.min(10, 7 * cam.zoom));
+        const r = Math.max(3.5, Math.min(12, 7 * cam.zoom));
+        const fontSize = Math.max(5, Math.min(10, 6.5 * cam.zoom));
         seats.forEach(s => {
           if (secMode && s.sectionId !== secMode) return;
           const [px, py] = w2s(s.x, s.y, cam, W, H);
           const isSel = sel.has(s.id);
-          const col = CAT_COLOR[s.category] || '#f87171';
+          const col = CAT_COLOR[s.category] || '#64748b';
+          const isSold = s.status === 'sold' || s.status === 'locked';
           ctx.save();
           ctx.beginPath();
           ctx.arc(px, py, r, 0, Math.PI * 2);
-          ctx.fillStyle = isSel ? col : col + '33';
+          // Fill
+          if (isSel) {
+            ctx.fillStyle = '#2563eb';
+          } else if (isSold) {
+            ctx.fillStyle = '#94a3b8';
+          } else {
+            ctx.fillStyle = col + '40';
+          }
           ctx.fill();
-          ctx.strokeStyle = isSel ? col : col + '99';
-          ctx.lineWidth = isSel ? 2 : 1;
+          // Stroke
+          ctx.strokeStyle = isSel ? '#1d4ed8' : (isSold ? '#64748b' : col);
+          ctx.lineWidth = isSel ? 2 : 1.2;
           ctx.stroke();
+          // Seat number label
           if (r >= 6) {
             ctx.font = `600 ${fontSize}px Inter,sans-serif`;
-            ctx.fillStyle = isSel ? '#fff' : col;
+            ctx.fillStyle = isSel ? '#fff' : (isSold ? '#fff' : col);
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(String(s.number), px, py);
@@ -667,6 +696,48 @@ export default function BuilderCanvas(props: Props) {
       ctx.beginPath(); ctx.moveTo(mx - 10, my); ctx.lineTo(mx + 10, my); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(mx, my - 10); ctx.lineTo(mx, my + 10); ctx.stroke();
       ctx.restore();
+    }
+
+    // ── Hover Tooltip ────────────────────────────────────────────────────────
+    if (tool === 'select' && !isPanning.current && !isDragging.current) {
+      const { seats } = layoutRef.current;
+      const hoverSeat = seats.find(s => {
+        if (secMode && s.sectionId !== secMode) return false;
+        return Math.hypot(s.x - mouse[0], s.y - mouse[1]) <= 8 / cam.zoom;
+      });
+
+      if (hoverSeat) {
+        const [mx, my] = w2s(hoverSeat.x, hoverSeat.y, cam, W, H);
+        const tooltipStr = `Row ${hoverSeat.label.replace(/\d+$/, '')}, Seat ${hoverSeat.number} ($${hoverSeat.price})`;
+        
+        ctx.save();
+        ctx.font = `600 11px ${FONT}`;
+        const tw = ctx.measureText(tooltipStr).width;
+        const bw = tw + 16, bh = 24;
+        const bx = mx - bw / 2, by = my - bh - 12;
+
+        // Shadow
+        ctx.shadowColor = 'rgba(0,0,0,0.15)'; ctx.shadowBlur = 10;
+        ctx.fillStyle = '#1e293b'; // dark tooltip
+        roundRect(ctx, bx, by, bw, bh, 6);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Pointer
+        ctx.beginPath();
+        ctx.moveTo(mx - 5, by + bh);
+        ctx.lineTo(mx + 5, by + bh);
+        ctx.lineTo(mx, by + bh + 5);
+        ctx.closePath();
+        ctx.fill();
+
+        // Text
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(tooltipStr, mx, by + bh / 2);
+        ctx.restore();
+      }
     }
   }, [canvasRef]);
 

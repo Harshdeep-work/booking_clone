@@ -6,7 +6,7 @@
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import Link from 'next/link';
 import {
-  Tool, Category, BuilderSection, BuilderSeat, ValidationError, LayoutSnapshot,
+  Tool, Category, BuilderSection, BuilderSeat, BuilderElement, ValidationError, LayoutSnapshot,
   CAT_COLOR, CAT_HEX, CATS, arcPoly, centroid, snapVal, validateLayout,
 } from './types';
 import { PropertyPanel, ValidationPanel, VersionPanel } from './BuilderPanels';
@@ -56,6 +56,7 @@ export default function ProBuilder() {
 
   const sectionsRef = useRef<BuilderSection[]>([]);
   const seatsRef    = useRef<BuilderSeat[]>([]);
+  const elementsRef = useRef<BuilderElement[]>([]);
   const selIds      = useRef<Set<string>>(new Set());
   const drawPts     = useRef<[number,number][]>([]);
   const rowPts      = useRef<[number,number][]>([]);
@@ -76,6 +77,7 @@ export default function ProBuilder() {
   const [counts, setCounts]       = useState({ sections:0, seats:0 });
   const [selSeat, setSelSeat]     = useState<any>(null);
   const [selSection, setSelSection] = useState<any>(null);
+  const [selElement, setSelElement] = useState<any>(null);
   const [multiCount, setMultiCount] = useState(0);
   const [errors, setErrors]       = useState<ValidationError[]>([]);
   const [history, setHistory]     = useState<LayoutSnapshot[]>([]);
@@ -91,9 +93,11 @@ export default function ProBuilder() {
     if (ids.length === 1) {
       setSelSeat(seatsRef.current.find(s => s.id === ids[0]) || null);
       setSelSection(sectionsRef.current.find(s => s.id === ids[0]) || null);
+      setSelElement(elementsRef.current.find(e => e.id === ids[0]) || null);
     } else {
       setSelSeat(null);
       setSelSection(null);
+      setSelElement(null);
     }
   }, []);
 
@@ -104,6 +108,7 @@ export default function ProBuilder() {
       timestamp: Date.now(),
       sections: JSON.parse(JSON.stringify(sectionsRef.current)),
       seats: JSON.parse(JSON.stringify(seatsRef.current)),
+      elements: JSON.parse(JSON.stringify(elementsRef.current)),
     };
     setHistory(h => [snapObj, ...h].slice(0, 50));
     setRedoStack([]);
@@ -206,6 +211,25 @@ export default function ProBuilder() {
       }
     });
 
+    // Elements
+    elementsRef.current.forEach(el => {
+      const active = selIds.current.has(el.id) && !vModeRef.current;
+      const [px, py] = worldToScreen(el.x, el.y, cam, W, H);
+      const ew = el.w * cam.zoom, eh = el.h * cam.zoom;
+      if (el.type === 'rect') {
+        ctx.fillStyle = el.bg || '#f1f5f9';
+        ctx.fillRect(px - ew/2, py - eh/2, ew, eh);
+        ctx.strokeStyle = active ? '#3b82f6' : (el.color || '#cbd5e1');
+        ctx.lineWidth = active ? 2 : 1;
+        ctx.strokeRect(px - ew/2, py - eh/2, ew, eh);
+        ctx.fillStyle = el.color || '#475569';
+        ctx.font = `bold ${Math.max(10, el.fontSize * cam.zoom)}px ${FONT}`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(el.label, px, py);
+      }
+    });
+
     // Drawing Previews
     const pts = toolRef.current === 'polygon' ? drawPts.current : (toolRef.current === 'row' ? rowPts.current : []);
     if (pts.length > 0 && !vModeRef.current) {
@@ -286,6 +310,13 @@ export default function ProBuilder() {
           x: swx, y: swy, price: 100, status: 'available', category: catRef.current
         });
         setCounts({ sections: sectionsRef.current.length, seats: seatsRef.current.length });
+        saveSnapshot();
+        return;
+      }
+      if (toolRef.current === 'element') {
+        elementsRef.current.push({
+          id: `el-${Date.now()}`, type: 'rect', label: 'STAGE', x: swx, y: swy, w: 200, h: 80, fontSize: 16, color: '#475569', bg: '#f1f5f9'
+        });
         saveSnapshot();
         return;
       }

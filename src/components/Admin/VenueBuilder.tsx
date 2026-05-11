@@ -9,6 +9,7 @@ import GenerateDialogs from './GenerateDialogs';
 import LeftPanel from './LeftPanel';
 import EmptyState from './EmptyState';
 import LayerPanel from './LayerPanel';
+import RowManagerPanel from './RowManagerPanel';
 import { useBuilderEngine } from './useBuilderEngine';
 import { icons } from './BuilderIcons';
 import type { LayoutState } from './builderTypes2';
@@ -26,7 +27,7 @@ export default function VenueBuilder() {
   const [showEmpty, setShowEmpty]             = useState(true);
   const [showAdvancedTools, setShowAdvancedTools] = useState(false);
   const [advancedTab, setAdvancedTab]         = useState<'grid' | 'tools' | 'import' | 'validate'>('grid');
-  const [rightTab, setRightTab]               = useState<'design'|'data'|'ai'>('design');
+  const [rightTab, setRightTab]               = useState<'design'|'data'|'rows'|'ai'>('design');
   const [aiInput, setAiInput]                 = useState('');
   const [aiMessages, setAiMessages]           = useState<{role:'user'|'assistant';text:string}[]>([
     { role: 'assistant', text: 'Hi! I can help you design your venue layout. Try: "Add 20 rows to section 101" or "Generate an NBA arena".' }
@@ -334,9 +335,9 @@ export default function VenueBuilder() {
         {/* ── Right Panel ───────────────────────────────────────────────── */}
         <div className="tf-right-panel">
           <div className="tf-panel-tabs">
-            {(['design','data','ai'] as const).map(t => (
+            {(['design','data','rows','ai'] as const).map(t => (
               <button key={t} className={`tf-panel-tab${rightTab===t?' active':''}`} onClick={() => setRightTab(t)}>
-                {t === 'design' ? 'Design' : t === 'data' ? 'Data' : 'AI'}
+                {t === 'design' ? 'Design' : t === 'data' ? 'Data' : t === 'rows' ? 'Rows' : 'AI'}
               </button>
             ))}
           </div>
@@ -378,6 +379,24 @@ export default function VenueBuilder() {
                   Export GeoJSON
                 </button>
               </div>
+            </div>
+          )}
+
+          {rightTab === 'rows' && (
+            <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+              <RowManagerPanel
+                layout={eng.layout}
+                selectedSectionId={eng.selectedShape?.id || null}
+                onAddRow={eng.addRow}
+                onDeleteRow={eng.deleteRow}
+                onDuplicateRow={eng.duplicateRow}
+                onUpdateRow={(rowId, updates) => eng.updateRow(rowId, updates)}
+                onSelectSeat={(seatId) => {
+                  eng.selectEntity(seatId);
+                  eng.changeTool('select');
+                }}
+                selectedSeatId={eng.selectedSeat?.id || null}
+              />
             </div>
           )}
 
