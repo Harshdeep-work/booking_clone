@@ -647,9 +647,9 @@ export default function VenueBuilder() {
                   onSeat={eng.updateSeat}
                   onText={eng.updateText}
                   onRow={eng.updateRow}
-                  onMultiCategory={(cat) => eng.multiUpdate({ category: cat })}
-                  onMultiPrice={(price) => eng.multiUpdate({ price })}
-                  onMultiStatus={(status) => eng.multiUpdate({ status })}
+                  onMultiCategory={(cat) => eng.multiUpdate(cat)}
+                  onMultiPrice={(price) => eng.multiUpdate(undefined, price)}
+                  onMultiStatus={(status) => eng.multiUpdate(undefined, undefined, status)}
                   onDelete={eng.deleteSelected}
                   onFillSection={eng.fillSection}
                   sectionMode={eng.sectionMode}

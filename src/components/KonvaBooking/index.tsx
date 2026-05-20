@@ -69,7 +69,7 @@ function RightPanel({
       {/* ── Event header ─────────────────────────────────────────────── */}
       <div style={{ padding: '20px 20px 0', background: '#fff', borderBottom: '1px solid #f3f4f6' }}>
         <div style={{ fontSize: 20, fontWeight: 900, color: '#111827', letterSpacing: -0.5, lineHeight: 1.2, marginBottom: 4 }}>
-          {layout?.venueName || 'My Venue'} — Booking
+          {(layout as any)?.venueName || 'My Venue'} — Booking
         </div>
         <div style={{ fontSize: 13, color: '#6b7280', fontWeight: 500, marginBottom: 16 }}>
           Select seats on the map to view availability
