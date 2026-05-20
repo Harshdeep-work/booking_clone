@@ -35,6 +35,23 @@ export interface CompactLayout {
       ]>;
     }>;
   }>;
+  os?: Array<{
+    id: string; // orphan sectionId
+    c: string;  // base category
+    r: Array<{
+      id: string;
+      l: string; // row label (e.g. "A")
+      p: number; // default row price
+      s: Array<[
+        number,   // number
+        number,   // x
+        number,   // y
+        number,   // status index
+        number?,  // price override (optional)
+        string?   // category override (optional)
+      ]>;
+    }>;
+  }>;
   txt: Array<{
     x: number; y: number;
     t: string; // text
@@ -70,13 +87,13 @@ export function packLayout(layout: LayoutState & { venueName?: string }): Compac
   });
 
   // 3. Compact Shapes
-  const sh = shapes.map(shape => {
-    const sectionRows = structure[shape.id] || {};
-    const rows = Object.entries(sectionRows).map(([rowId, rowSeats]) => {
+  const buildRows = (rowMap: Record<string, BSeat[]>, baseCategory: Category) =>
+    Object.entries(rowMap).map(([rowId, rowSeats]) => {
+      if (!rowSeats.length) return null;
       // Find common price in row to use as default
       const prices = rowSeats.map(s => s.price);
-      const commonPrice = prices.sort((a,b) =>
-        prices.filter(v => v===a).length - prices.filter(v => v===b).length
+      const commonPrice = prices.sort((a, b) =>
+        prices.filter(v => v === a).length - prices.filter(v => v === b).length
       ).pop() || 0;
 
       return {
@@ -91,14 +108,23 @@ export function packLayout(layout: LayoutState & { venueName?: string }): Compac
             STATUS_MAP.indexOf(s.status)
           ];
           if (s.price !== commonPrice) seatData.push(s.price);
-          if (s.category !== shape.category) {
-             if (seatData.length === 4) seatData.push(null); // padding if price is default
-             seatData.push(s.category);
+          if (s.category !== baseCategory) {
+            if (seatData.length === 4) seatData.push(null); // padding if price is default
+            seatData.push(s.category);
           }
           return seatData as [number, number, number, number, number?, string?];
         })
       };
-    });
+    }).filter(Boolean) as Array<{
+      id: string;
+      l: string;
+      p: number;
+      s: Array<[number, number, number, number, number?, string?]>;
+    }>;
+
+  const sh = shapes.map(shape => {
+    const sectionRows = structure[shape.id] || {};
+    const rows = buildRows(sectionRows, shape.category);
 
     return {
       id: shape.id,
@@ -112,11 +138,28 @@ export function packLayout(layout: LayoutState & { venueName?: string }): Compac
     };
   });
 
+  const shapeIds = new Set(shapes.map(s => s.id));
+  const orphanSections = Object.entries(structure)
+    .filter(([sectionId]) => !shapeIds.has(sectionId))
+    .map(([sectionId, sectionRows]) => {
+      const sectionSeats = Object.values(sectionRows).flat();
+      const baseCategory = sectionSeats.reduce((acc, s) => {
+        acc.set(s.category, (acc.get(s.category) ?? 0) + 1);
+        return acc;
+      }, new Map<Category, number>());
+      const mostCommonCategory = [...baseCategory.entries()]
+        .sort((a, b) => b[1] - a[1])[0]?.[0] || 'STANDARD';
+      const rows = buildRows(sectionRows, mostCommonCategory);
+      return { id: sectionId, c: mostCommonCategory, r: rows };
+    })
+    .filter(sec => sec.r.length > 0);
+
   return {
     v: '1.0',
     n: venueName,
     m: { c: cats, s: STATUS_MAP, t: TYPE_MAP },
     sh,
+    ...(orphanSections.length ? { os: orphanSections } : {}),
     txt: texts.map(t => ({
       x: Math.round(t.x * 10) / 10,
       y: Math.round(t.y * 10) / 10,
@@ -148,29 +191,38 @@ export function unpackLayout(compact: CompactLayout): LayoutState {
   const seats: BSeat[] = [];
   const rows: BRow[] = [];
 
-  compact.sh.forEach(shape => {
-    if (!shape.r) return;
-    shape.r.forEach(r => {
+  const expandRows = (sectionId: string, baseCategory: Category, rowData?: CompactLayout['sh'][number]['r']) => {
+    if (!rowData) return;
+    rowData.forEach(r => {
       const rowSeats: BSeat[] = r.s.map(s => ({
-        id: `s-${shape.id}-${r.l}-${s[0]}`,
+        id: `s-${sectionId}-${r.l}-${s[0]}`,
         rowId: r.id,
-        sectionId: shape.id,
+        sectionId,
         number: s[0],
         label: `${r.l}${s[0]}`,
         x: s[1], y: s[2],
         status: STATUS_MAP[s[3]],
         price: s[4] ?? r.p,
-        category: (s[5] ?? shape.c) as Category
+        category: (s[5] ?? baseCategory) as Category
       }));
       seats.push(...rowSeats);
       rows.push({
         id: r.id,
-        sectionId: shape.id,
+        sectionId,
         label: r.l,
-        category: shape.c as Category,
+        category: baseCategory,
         seats: rowSeats
       });
     });
+  };
+
+  compact.sh.forEach(shape => {
+    expandRows(shape.id, shape.c as Category, shape.r);
+  });
+
+  compact.os?.forEach(section => {
+    const baseCategory = (section.c as Category) || 'STANDARD';
+    expandRows(section.id, baseCategory, section.r);
   });
 
   const texts: BText[] = compact.txt.map((t, i) => ({
