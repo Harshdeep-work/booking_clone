@@ -64,7 +64,14 @@ const STATUS_MAP: SeatStatus[] = ['available', 'sold', 'locked', 'obstructed'];
 const TYPE_MAP = ['section', 'stage', 'ga', 'court', 'suite', 'pressbox', 'scoreboard', 'tunnel', 'concourse', 'ada', 'text', 'table', 'standing'];
 
 export function packLayout(layout: LayoutState & { venueName?: string }): CompactLayout {
-  const { shapes, seats, texts, venueName } = layout;
+  const { shapes, texts, venueName } = layout;
+  const seatById = new Map<string, BSeat>(layout.seats.map(s => [s.id, s]));
+  layout.rows.forEach(r => {
+    r.seats?.forEach(s => {
+      if (!seatById.has(s.id)) seatById.set(s.id, s);
+    });
+  });
+  const seats = [...seatById.values()];
 
   // 1. Build Metadata — include ALL entries from CAT_COLOR registry (preserves custom tiers)
   const cats: Record<string, { c: string; l: string }> = {};
