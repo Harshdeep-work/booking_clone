@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useCallback } from 'react';
-import type { LayoutState, BShape, BSeat, BText, ToolId } from './builderTypes2';
+import type { LayoutState, BShape, BSeat, BText, BRow, ToolId, LayerState } from './builderTypes2';
 import { CAT_COLOR, pointInPoly } from './builderTypes2';
 
 export interface Camera { x: number; y: number; zoom: number }
@@ -18,7 +18,7 @@ interface Props {
   camera: Camera;
   preview: DrawPreview;
   selectedIds: Set<string>;
-  sectionMode: string | null;   // id of section being edited inside
+  sectionMode: string | null;
   bgImage: HTMLImageElement | null;
   bgOpacity: number;
   onCamera: (c: Camera) => void;
@@ -30,6 +30,10 @@ interface Props {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
   containerRef: React.RefObject<HTMLDivElement | null>;
   cursor: string;
+  seatView?: 'seats' | 'rows';
+  orphanDisplayModes?: Record<string, 'rows' | 'seats' | 'both'>;
+  orphanRenderStyles?: Record<string, 'dots' | 'bar' | 'line'>;
+  layers?: LayerState[];
 }
 
 const FONT = "'Inter',system-ui,sans-serif";
@@ -84,7 +88,7 @@ export function s2w(sx: number, sy: number, cam: Camera, W: number, H: number): 
 export default function BuilderCanvas(props: Props) {
   const { layout, camera, preview, selectedIds, sectionMode, bgImage, bgOpacity,
     onPointerDown, onPointerMove, onPointerUp, onDblClick, onWheel,
-    canvasRef, containerRef, cursor } = props;
+    canvasRef, containerRef, cursor, seatView = 'seats', orphanDisplayModes = {}, orphanRenderStyles = {}, layers = [] } = props;
 
   const rafRef = useRef<number | null>(null);
   const layoutRef = useRef(layout);
@@ -94,6 +98,9 @@ export default function BuilderCanvas(props: Props) {
   const secModeRef = useRef(sectionMode);
   const bgRef = useRef(bgImage);
   const bgOpRef = useRef(bgOpacity);
+  const seatViewRef = useRef(seatView);
+  const orphanDMRef = useRef(orphanDisplayModes);
+  const orphanRSRef = useRef(orphanRenderStyles);
 
   useEffect(() => { layoutRef.current = layout; }, [layout]);
   useEffect(() => { camRef.current = camera; }, [camera]);
@@ -102,16 +109,29 @@ export default function BuilderCanvas(props: Props) {
   useEffect(() => { secModeRef.current = sectionMode; }, [sectionMode]);
   useEffect(() => { bgRef.current = bgImage; }, [bgImage]);
   useEffect(() => { bgOpRef.current = bgOpacity; }, [bgOpacity]);
+  useEffect(() => { seatViewRef.current = seatView; }, [seatView]);
+  useEffect(() => { orphanDMRef.current = orphanDisplayModes; }, [orphanDisplayModes]);
+  useEffect(() => { orphanRSRef.current = orphanRenderStyles; }, [orphanRenderStyles]);
+  const layersRef = useRef(layers);
+  useEffect(() => { layersRef.current = layers; }, [layers]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current; if (!canvas) return;
     const ctx = canvas.getContext('2d'); if (!ctx) return;
     const W = canvas.width, H = canvas.height;
     const cam = camRef.current;
-    const { shapes, seats, texts } = layoutRef.current;
+    const { shapes, seats, texts, rows: layoutRows } = layoutRef.current;
     const sel = selRef.current;
     const secMode = secModeRef.current;
     const pv = previewRef.current;
+
+    const layers = layersRef.current;
+    const showSections = layers ? layers.find(l => l.id === 'sections')?.visible !== false : true;
+    const showSeats = layers ? layers.find(l => l.id === 'seats')?.visible !== false : true;
+    const showLabels = layers ? layers.find(l => l.id === 'labels')?.visible !== false : true;
+    const showPricing = layers ? layers.find(l => l.id === 'pricing')?.visible !== false : true;
+    const showEntrances = layers ? layers.find(l => l.id === 'entrances')?.visible !== false : true;
+    const showOverlays = layers ? layers.find(l => l.id === 'overlays')?.visible !== false : true;
 
     ctx.clearRect(0, 0, W, H);
 
@@ -120,7 +140,7 @@ export default function BuilderCanvas(props: Props) {
     ctx.fillRect(0, 0, W, H);
 
     // ── Reference image ───────────────────────────────────────────────────────
-    if (bgRef.current) {
+    if (bgRef.current && showOverlays) {
       const img = bgRef.current;
       const fitScale = Math.min(W / img.width, H / img.height) * 0.9;
       const sw = img.width * fitScale * cam.zoom, sh = img.height * fitScale * cam.zoom;
@@ -166,6 +186,12 @@ export default function BuilderCanvas(props: Props) {
     // ── Shapes ────────────────────────────────────────────────────────────────
     shapes.forEach(shape => {
       if (secMode && shape.id !== secMode) return;
+      const isEntranceType = ['court', 'stage', 'tunnel', 'concourse', 'ada', 'scoreboard', 'pressbox'].includes(shape.type);
+      if (isEntranceType) {
+        if (!showEntrances) return;
+      } else {
+        if (!showSections && !secMode) return;
+      }
       const vs = shape.vertices;
       if (vs.length < 2) return;
       const isSel = sel.has(shape.id);
@@ -294,6 +320,7 @@ export default function BuilderCanvas(props: Props) {
       const cat = shape.category as string;
       const customFill = isCustomShapeColor(shape) ? shape.color : null;
       const secSeats = seats.filter(s => s.sectionId === shape.id);
+      const secRows  = layoutRows.filter(r => r.sectionId === shape.id);
       const fillCol = customFill || TIER_FILL[cat] || '#e2e8f0';
       const strokeCol = isSel ? '#2563eb' : (customFill ? darken(customFill, 0.25) : (TIER_STROKE[cat] || '#94a3b8'));
       const rowCol    = TIER_ROW[cat] || '#cbd5e1';
@@ -302,24 +329,135 @@ export default function BuilderCanvas(props: Props) {
       ctx.fillStyle = fillCol;
       ctx.fill();
 
-      // ── Row stripes inside section (TickPick's key visual) ────────────────
-      // Get rows for this section, draw as horizontal-ish stripes clipped to shape
-      if (secSeats.length > 0 && cam.zoom > 0.4) {
-        // Group by rowId
-        const rowMap = new Map<string, typeof secSeats>();
-        secSeats.forEach(s => {
-          if (!rowMap.has(s.rowId)) rowMap.set(s.rowId, []);
-          rowMap.get(s.rowId)!.push(s);
-        });
-        const rowIds = [...rowMap.keys()];
-        const totalRows = rowIds.length;
+      // ── ARC SECTION: draw filled arc-band rows (TickPick style) ───────────
+      const hasArc = !!(shape.arcCenter && shape.arcInnerR != null && shape.arcOuterR != null && shape.arcA0 != null && shape.arcA1 != null);
+      const dm = shape.displayMode || 'both';
+      if (hasArc && dm !== 'seats') {
+        const [acx, acy] = shape.arcCenter!;
+        const innerR = shape.arcInnerR!, outerR = shape.arcOuterR!;
+        const a0deg = shape.arcA0!, a1deg = shape.arcA1!;
+        const a0r = a0deg * Math.PI / 180, a1r = a1deg * Math.PI / 180;
+        const [sccx, sccy] = w2s(acx, acy, cam, W, H);
+        const sInner = innerR * cam.zoom, sOuter = outerR * cam.zoom;
 
-        if (totalRows > 1) {
+        ctx.save();
+        // Clip to section polygon
+        ctx.beginPath();
+        const [cfx, cfy] = w2s(vs[0][0], vs[0][1], cam, W, H);
+        ctx.moveTo(cfx, cfy);
+        for (let i = 1; i < vs.length; i++) {
+          const [px, py] = w2s(vs[i][0], vs[i][1], cam, W, H);
+          ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.clip();
+
+        // Determine rows to draw
+        const rowsToDraw = secRows.filter(r => r.curveCenter && r.curveRadius != null);
+        const totalR = outerR - innerR;
+
+        if (rowsToDraw.length === 0) {
+          // No explicit rows — draw auto bands (8 equal bands)
+          const bandCount = 8;
+          for (let i = 0; i < bandCount; i++) {
+            const r0 = sInner + (i / bandCount) * (sOuter - sInner);
+            const r1 = sInner + ((i + 1) / bandCount) * (sOuter - sInner);
+            const rMid = (r0 + r1) / 2;
+            ctx.beginPath();
+            ctx.arc(sccx, sccy, rMid, a0r, a1r);
+            ctx.strokeStyle = rowCol;
+            ctx.lineWidth = r1 - r0 - 1;
+            ctx.lineCap = 'butt';
+            ctx.stroke();
+            // white divider
+            ctx.beginPath();
+            ctx.arc(sccx, sccy, r1, a0r, a1r);
+            ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+            ctx.lineWidth = Math.max(1, cam.zoom);
+            ctx.stroke();
+          }
+        } else {
+          // Draw explicit rows as filled arc bands
+          rowsToDraw.forEach((row, ri) => {
+            const isRowSel = sel.has(row.id);
+            const effectiveCol = row.color || rowCol;
+            const rWorld = row.curveRadius!;
+            const ra0 = (row.curveA0 ?? a0deg) * Math.PI / 180;
+            const ra1 = (row.curveA1 ?? a1deg) * Math.PI / 180;
+
+            // Band thickness: half-gap to prev + half-gap to next
+            const prevRow = rowsToDraw[ri - 1];
+            const nextRow = rowsToDraw[ri + 1];
+            const halfPrev = prevRow?.curveRadius != null ? (rWorld - prevRow.curveRadius!) / 2 : (totalR / rowsToDraw.length) / 2;
+            const halfNext = nextRow?.curveRadius != null ? (nextRow.curveRadius! - rWorld) / 2 : (totalR / rowsToDraw.length) / 2;
+            const rInner = (rWorld - halfPrev) * cam.zoom;
+            const rOuter = (rWorld + halfNext) * cam.zoom;
+            const rMid = (rInner + rOuter) / 2;
+            const bandW = rOuter - rInner - 1;
+
+            ctx.beginPath();
+            ctx.arc(sccx, sccy, rMid, ra0, ra1);
+            ctx.strokeStyle = effectiveCol;
+            ctx.lineWidth = isRowSel ? bandW + 3 : bandW;
+            ctx.lineCap = 'butt';
+            ctx.stroke();
+
+            // White divider line
+            ctx.beginPath();
+            ctx.arc(sccx, sccy, rOuter, ra0, ra1);
+            ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+            ctx.lineWidth = Math.max(1, cam.zoom * 0.8);
+            ctx.stroke();
+
+            // Row number label on right edge
+            if (cam.zoom >= 0.35) {
+              const labelA = ra1 + 0.04;
+              const lx2 = sccx + Math.cos(labelA) * rMid;
+              const ly2 = sccy + Math.sin(labelA) * rMid;
+              ctx.font = `500 ${Math.max(6, Math.min(10, 7 * cam.zoom))}px ${FONT}`;
+              ctx.fillStyle = isRowSel ? effectiveCol : '#94a3b8';
+              ctx.textAlign = 'left';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(row.label, lx2, ly2);
+            }
+
+            // Selection glow + handles
+            if (isRowSel) {
+              ctx.beginPath();
+              ctx.arc(sccx, sccy, rMid, ra0, ra1);
+              ctx.strokeStyle = effectiveCol;
+              ctx.lineWidth = bandW + 10;
+              ctx.globalAlpha = 0.18;
+              ctx.stroke();
+              ctx.globalAlpha = 1;
+
+              // Handles: left end, right end, outer radius
+              const ep0x = sccx + Math.cos(ra0) * rMid, ep0y = sccy + Math.sin(ra0) * rMid;
+              const ep1x = sccx + Math.cos(ra1) * rMid, ep1y = sccy + Math.sin(ra1) * rMid;
+              const amid = (ra0 + ra1) / 2;
+              const rhx = sccx + Math.cos(amid) * (rOuter + 14), rhy = sccy + Math.sin(amid) * (rOuter + 14);
+              [[ep0x, ep0y, '◂'], [ep1x, ep1y, '▸'], [rhx, rhy, '↕']].forEach(([hx, hy, icon]) => {
+                ctx.beginPath();
+                ctx.arc(hx as number, hy as number, 8, 0, Math.PI * 2);
+                ctx.fillStyle = '#fff';
+                ctx.shadowColor = 'rgba(0,0,0,0.2)'; ctx.shadowBlur = 4;
+                ctx.fill(); ctx.shadowBlur = 0;
+                ctx.strokeStyle = effectiveCol; ctx.lineWidth = 2; ctx.stroke();
+                ctx.fillStyle = effectiveCol;
+                ctx.font = `bold 9px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText(icon as string, hx as number, hy as number);
+              });
+            }
+          });
+        }
+        ctx.restore();
+      } else {
+        // ── Non-arc section: draw curved rows from layoutRows ─────────────
+        if (secRows.length > 0) {
           ctx.save();
-          // Clip to section shape
           ctx.beginPath();
-          const [fx2, fy2] = w2s(vs[0][0], vs[0][1], cam, W, H);
-          ctx.moveTo(fx2, fy2);
+          const [fx0, fy0] = w2s(vs[0][0], vs[0][1], cam, W, H);
+          ctx.moveTo(fx0, fy0);
           for (let i = 1; i < vs.length; i++) {
             const [px, py] = w2s(vs[i][0], vs[i][1], cam, W, H);
             ctx.lineTo(px, py);
@@ -327,44 +465,131 @@ export default function BuilderCanvas(props: Props) {
           ctx.closePath();
           ctx.clip();
 
-          // Draw alternating row stripes
-          rowIds.forEach((rowId, ri) => {
-            const rowSeats = rowMap.get(rowId)!;
-            if (rowSeats.length < 2) return;
-            // Sort seats by angle/position
-            rowSeats.sort((a, b) => a.number - b.number);
-            const screenPts = rowSeats.map(s => w2s(s.x, s.y, cam, W, H));
-
-            // Compute row thickness from adjacent rows
-            const nextRowId = rowIds[ri + 1];
-            const prevRowId = rowIds[ri - 1];
-            let thickness = 6 * cam.zoom;
-            if (nextRowId) {
-              const nextSeats = rowMap.get(nextRowId)!;
-              if (nextSeats.length > 0) {
-                const [nx, ny] = w2s(nextSeats[0].x, nextSeats[0].y, cam, W, H);
-                const [cx3, cy3] = w2s(rowSeats[0].x, rowSeats[0].y, cam, W, H);
-                thickness = Math.max(3, Math.min(20, Math.hypot(nx-cx3, ny-cy3) * 0.85));
-              }
+          secRows.forEach((row, ri) => {
+            if (!row.curveCenter || row.curveRadius == null || row.curveA0 == null || row.curveA1 == null) return;
+            const isRowSel = sel.has(row.id);
+            const effectiveRowCol = row.color || rowCol;
+            let thickness = Math.max(6, 8 * cam.zoom);
+            const nextRow = secRows[ri + 1];
+            if (nextRow?.curveRadius != null) {
+              thickness = Math.max(6, Math.min(28, (nextRow.curveRadius - row.curveRadius) * cam.zoom * 0.85));
             }
-
-            // Draw row as a thick polyline (stroke)
+            const [ccx, ccy] = w2s(row.curveCenter[0], row.curveCenter[1], cam, W, H);
+            const rPx = row.curveRadius * cam.zoom;
+            const a0r = (row.curveA0 * Math.PI) / 180;
+            const a1r = (row.curveA1 * Math.PI) / 180;
             ctx.beginPath();
-            ctx.moveTo(screenPts[0][0], screenPts[0][1]);
-            for (let i = 1; i < screenPts.length; i++) ctx.lineTo(screenPts[i][0], screenPts[i][1]);
-            ctx.strokeStyle = rowCol;
-            ctx.lineWidth = thickness;
-            ctx.lineCap = 'round';
+            ctx.arc(ccx, ccy, rPx, a0r, a1r, a1r < a0r);
+            ctx.strokeStyle = effectiveRowCol;
+            ctx.lineWidth = isRowSel ? thickness + 3 : thickness;
+            ctx.lineCap = 'butt';
             ctx.stroke();
-
-            // White separator line between rows
-            if (cam.zoom > 0.6) {
-              ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-              ctx.lineWidth = Math.max(0.5, 0.8 * cam.zoom);
-              ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(ccx, ccy, rPx, a0r, a1r, a1r < a0r);
+            ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+            ctx.lineWidth = Math.max(1, 1.2 * cam.zoom);
+            ctx.stroke();
+            if (cam.zoom >= 0.4) {
+              const lx2 = ccx + Math.cos(a1r) * rPx + Math.cos(a1r) * 8;
+              const ly2 = ccy + Math.sin(a1r) * rPx + Math.sin(a1r) * 8;
+              ctx.font = `500 ${Math.max(6, Math.min(10, 7 * cam.zoom))}px ${FONT}`;
+              ctx.fillStyle = isRowSel ? effectiveRowCol : '#94a3b8';
+              ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+              ctx.fillText(row.label, lx2, ly2);
+            }
+            if (isRowSel) {
+              ctx.beginPath();
+              ctx.arc(ccx, ccy, rPx, a0r, a1r, a1r < a0r);
+              ctx.strokeStyle = effectiveRowCol; ctx.lineWidth = thickness + 8;
+              ctx.globalAlpha = 0.2; ctx.stroke(); ctx.globalAlpha = 1;
+              const ep0x = ccx + Math.cos(a0r) * rPx, ep0y = ccy + Math.sin(a0r) * rPx;
+              const ep1x = ccx + Math.cos(a1r) * rPx, ep1y = ccy + Math.sin(a1r) * rPx;
+              const amid = (a0r + a1r) / 2;
+              const rhx = ccx + Math.cos(amid) * (rPx + 16), rhy = ccy + Math.sin(amid) * (rPx + 16);
+              [[ep0x, ep0y, '◂'], [ep1x, ep1y, '▸'], [rhx, rhy, '↕']].forEach(([hx, hy, icon]) => {
+                ctx.beginPath(); ctx.arc(hx as number, hy as number, 8, 0, Math.PI * 2);
+                ctx.fillStyle = '#fff'; ctx.shadowColor = 'rgba(0,0,0,0.2)'; ctx.shadowBlur = 4;
+                ctx.fill(); ctx.shadowBlur = 0;
+                ctx.strokeStyle = effectiveRowCol; ctx.lineWidth = 2; ctx.stroke();
+                ctx.fillStyle = effectiveRowCol; ctx.font = `bold 9px ${FONT}`;
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText(icon as string, hx as number, hy as number);
+              });
             }
           });
           ctx.restore();
+        }
+
+        // ── Seat-based straight rows ──────────────────────────────────────
+        if (secSeats.length > 0 && (dm !== 'seats') && (cam.zoom > 0.2 || dm === 'rows' || dm === 'both')) {
+          const curvedRowIds = new Set(secRows.map(r => r.id));
+          const rowMap = new Map<string, typeof secSeats>();
+          secSeats.forEach(s => {
+            const key = s.rowId || `__norow__${s.sectionId}`;
+            if (curvedRowIds.has(key)) return;
+            if (!rowMap.has(key)) rowMap.set(key, []);
+            rowMap.get(key)!.push(s);
+          });
+          const rowIds = [...rowMap.keys()];
+          if (rowIds.length >= 1) {
+            ctx.save();
+            if (seatViewRef.current !== 'rows') {
+              ctx.beginPath();
+              const [fx2, fy2] = w2s(vs[0][0], vs[0][1], cam, W, H);
+              ctx.moveTo(fx2, fy2);
+              for (let i = 1; i < vs.length; i++) {
+                const [px, py] = w2s(vs[i][0], vs[i][1], cam, W, H);
+                ctx.lineTo(px, py);
+              }
+              ctx.closePath(); ctx.clip();
+            }
+            const seatRSec = Math.max(4, Math.min(10, 6 * cam.zoom));
+            rowIds.forEach((rowId) => {
+              const rowSeats = rowMap.get(rowId)!;
+              if (rowSeats.length < 1) return;
+              rowSeats.sort((a, b) => a.number - b.number);
+              const rowMeta = layoutRows.find(r => r.id === rowId);
+              const isRowSel = sel.has(rowId);
+              const effectiveRowCol = rowMeta?.color || rowCol;
+
+              const first = rowSeats[0], last = rowSeats[rowSeats.length - 1];
+              const [x0, y0] = w2s(first.x, first.y, cam, W, H);
+              const [x1, y1] = w2s(last.x, last.y, cam, W, H);
+              const angle = Math.atan2(y1 - y0, x1 - x0);
+              const seatSpacingPx = rowSeats.length > 1
+                ? Math.hypot(x1 - x0, y1 - y0) / (rowSeats.length - 1)
+                : seatRSec * 2.5;
+              const ext = seatSpacingPx * 0.5;
+              const dx2 = Math.cos(angle), dy2 = Math.sin(angle);
+
+              // Thin guide line — only show when row is selected
+              if (isRowSel) {
+              ctx.beginPath();
+              ctx.moveTo(x0 - dx2 * ext, y0 - dy2 * ext);
+              ctx.lineTo(x1 + dx2 * ext, y1 + dy2 * ext);
+              ctx.strokeStyle = effectiveRowCol + 'cc';
+              ctx.lineWidth = Math.max(2, 2 * cam.zoom);
+              ctx.stroke();
+              }
+
+              // Row labels at both ends
+              if (cam.zoom >= 0.2) {
+                const rowLetter = rowSeats[0].label.replace(/\d+$/, '');
+                if (rowLetter) {
+                  const labelSize = Math.max(8, Math.min(13, 9 * cam.zoom));
+                  ctx.font = `700 ${labelSize}px ${FONT}`;
+                  ctx.fillStyle = isRowSel ? effectiveRowCol : '#1e293b';
+                  ctx.textBaseline = 'middle';
+                  const pad = seatRSec + 8;
+                  ctx.textAlign = 'right';
+                  ctx.fillText(rowLetter, x0 - dx2 * pad, y0 - dy2 * pad);
+                  ctx.textAlign = 'left';
+                  ctx.fillText(rowLetter, x1 + dx2 * pad, y1 + dy2 * pad);
+                }
+              }
+            });
+            ctx.restore();
+          }
         }
       }
 
@@ -398,7 +623,7 @@ export default function BuilderCanvas(props: Props) {
 
         // Price badge (white pill, always visible like TickPick)
         const minP = seats.filter(s => s.sectionId === shape.id).reduce((a, s) => Math.min(a, s.price), Infinity);
-        if (minP !== Infinity && minP > 0 && cam.zoom > 0.35) {
+        if (showPricing && minP !== Infinity && minP > 0 && cam.zoom > 0.35) {
           const priceStr = `$${minP.toLocaleString()}`;
           const badgeFont = Math.max(7, Math.min(11, 9 * cam.zoom));
           ctx.font = `700 ${badgeFont}px ${FONT}`;
@@ -425,99 +650,413 @@ export default function BuilderCanvas(props: Props) {
       if (isSel && !secMode) {
         vs.forEach(v => {
           const [px, py] = w2s(v[0], v[1], cam, W, H);
-          ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI*2);
+          ctx.beginPath(); ctx.arc(px, py, 7, 0, Math.PI*2);
           ctx.fillStyle = '#fff'; ctx.fill();
-          ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 2;
+          ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 2.5;
           ctx.stroke();
         });
       }
     });
 
-    // ── Row labels at edge of each row (BookMyShow style) ─────────────────────
-    if (cam.zoom >= 0.8) {
-      const rowMap = new Map<string, { x: number; y: number; rowLabel: string; number: number }[]>();
-      seats.forEach(s => {
-        if (!s.rowId) return;
-        if (!rowMap.has(s.rowId)) rowMap.set(s.rowId, []);
-        rowMap.get(s.rowId)!.push({
-          x: s.x, y: s.y,
-          rowLabel: s.label.replace(/\d+$/, ''),
-          number: s.number,
+    // ── Bounding box resize handles (Figma-style) ─────────────────────────────
+    if (!secMode && sel.size > 0) {
+      const selShapes = shapes.filter(s => sel.has(s.id));
+      if (selShapes.length > 0) {
+        const allVerts = selShapes.flatMap(s => s.vertices);
+        const bx0 = Math.min(...allVerts.map(v => v[0]));
+        const by0 = Math.min(...allVerts.map(v => v[1]));
+        const bx1 = Math.max(...allVerts.map(v => v[0]));
+        const by1 = Math.max(...allVerts.map(v => v[1]));
+        const bmx = (bx0 + bx1) / 2, bmy = (by0 + by1) / 2;
+
+        const [sx0, sy0] = w2s(bx0, by0, cam, W, H);
+        const [sx1, sy1] = w2s(bx1, by1, cam, W, H);
+        const [smx, smy] = w2s(bmx, bmy, cam, W, H);
+
+        // Dashed bounding box
+        ctx.save();
+        ctx.strokeStyle = '#2563eb';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([5, 3]);
+        ctx.strokeRect(sx0, sy0, sx1 - sx0, sy1 - sy0);
+        ctx.setLineDash([]);
+
+        // 8 handles: TL,TC,TR,ML,MR,BL,BC,BR
+        const handles: [number, number][] = [
+          [sx0, sy0], [smx, sy0], [sx1, sy0],
+          [sx0, smy],             [sx1, smy],
+          [sx0, sy1], [smx, sy1], [sx1, sy1],
+        ];
+        handles.forEach(([hx, hy]) => {
+          ctx.beginPath();
+          ctx.rect(hx - 5, hy - 5, 10, 10);
+          ctx.fillStyle = '#fff';
+          ctx.fill();
+          ctx.strokeStyle = '#2563eb';
+          ctx.lineWidth = 2;
+          ctx.stroke();
         });
-      });
 
-      const fontSize = Math.max(7, Math.min(13, 9 * cam.zoom));
-      ctx.save();
-      rowMap.forEach((pts) => {
-        if (pts.length === 0) return;
-        pts.sort((a, b) => a.x - b.x);
-        const leftSeat  = pts[0];
-        const rightSeat = pts[pts.length - 1];
-        const rowLetter = leftSeat.rowLabel;
-        if (!rowLetter) return;
+        // Rotate handle: circle above top-center with a short stem only
+        const rotHY = sy0 - 24;
+        ctx.beginPath();
+        ctx.moveTo(smx, sy0 - 2);
+        ctx.lineTo(smx, rotHY + 7);
+        ctx.strokeStyle = '#2563eb';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(smx, rotHY, 7, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+        ctx.strokeStyle = '#2563eb';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        // rotation arrow icon inside
+        ctx.save();
+        ctx.translate(smx, rotHY);
+        ctx.strokeStyle = '#2563eb';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(0, 0, 3.5, -Math.PI * 0.8, Math.PI * 0.8);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(2.5, -3.5); ctx.lineTo(4, -1.5); ctx.lineTo(0.5, -1.5);
+        ctx.fillStyle = '#2563eb'; ctx.fill();
+        ctx.restore();
 
-        const [lx, ly] = w2s(leftSeat.x,  leftSeat.y,  cam, W, H);
-        const [rx]     = w2s(rightSeat.x, rightSeat.y, cam, W, H);
-        const pad = Math.max(10, 14 * cam.zoom);
-
-        ctx.font = `700 ${fontSize}px ${FONT}`;
-        ctx.fillStyle = '#64748b';
-        ctx.textBaseline = 'middle';
-
-        // Left label
-        ctx.textAlign = 'right';
-        ctx.fillText(rowLetter, lx - pad * 0.35, ly);
-
-        // Right label
-        ctx.textAlign = 'left';
-        ctx.fillText(rowLetter, rx + pad * 0.35, ly);
-      });
-      ctx.restore();
+        ctx.restore();
+      }
     }
 
-    // ── Individual seat circles (shown in section-edit mode or at zoom ≥ 1.5) ───
-    {
-      const showSeats = secMode || cam.zoom >= 1.5;
-      if (showSeats) {
-        const r = Math.max(3.5, Math.min(12, 7 * cam.zoom));
-        const fontSize = Math.max(5, Math.min(10, 6.5 * cam.zoom));
-        seats.forEach(s => {
-          if (secMode && s.sectionId !== secMode) return;
-          const [px, py] = w2s(s.x, s.y, cam, W, H);
-          const isSel = sel.has(s.id);
-          const col = CAT_COLOR[s.category] || '#64748b';
-          const isSold = s.status === 'sold' || s.status === 'locked';
+    // ── Fallback row stripes for seats with no matching section shape ──────────
+    if (showSeats) {
+      const shapeIds = new Set(shapes.map(s => s.id));
+      const orphanSeats = seats.filter(s => !shapeIds.has(s.sectionId));
+      if (orphanSeats.length > 0) {
+        // Group by section first, then by row
+        const bySec = new Map<string, typeof orphanSeats>();
+        orphanSeats.forEach(s => {
+          if (!bySec.has(s.sectionId)) bySec.set(s.sectionId, []);
+          bySec.get(s.sectionId)!.push(s);
+        });
+
+        bySec.forEach((secSeats, sectionId) => {
+          const dm = orphanDMRef.current[sectionId] || 'both';
+          // 'seats' mode: skip row stripes (handled in seat circles block below)
+          if (dm === 'seats') return;
+          // 'both' mode: only show stripes, seat circles appear on zoom (handled below)
+
+          const rowMap = new Map<string, typeof secSeats>();
+          secSeats.forEach(s => {
+            const key = s.rowId || `__norow__${s.sectionId}`;
+            if (!rowMap.has(key)) rowMap.set(key, []);
+            rowMap.get(key)!.push(s);
+          });
+          const rowIds = [...rowMap.keys()];
+          // Pre-compute seat radius to size the stripe correctly
+          const seatR = Math.max(4, Math.min(10, 6 * cam.zoom));
           ctx.save();
-          ctx.beginPath();
-          ctx.arc(px, py, r, 0, Math.PI * 2);
-          // Fill
-          if (isSel) {
-            ctx.fillStyle = '#2563eb';
-          } else if (isSold) {
-            ctx.fillStyle = '#94a3b8';
-          } else {
-            ctx.fillStyle = col + '40';
-          }
-          ctx.fill();
-          // Stroke
-          ctx.strokeStyle = isSel ? '#1d4ed8' : (isSold ? '#64748b' : col);
-          ctx.lineWidth = isSel ? 2 : 1.2;
-          ctx.stroke();
-          // Seat number label
-          if (r >= 6) {
-            ctx.font = `600 ${fontSize}px Inter,sans-serif`;
-            ctx.fillStyle = isSel ? '#fff' : (isSold ? '#fff' : col);
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(String(s.number), px, py);
-          }
+          rowIds.forEach((rowId) => {
+            const rowSeats = rowMap.get(rowId)!;
+            rowSeats.sort((a, b) => a.number - b.number);
+            const col = rowSeats[0]?.color || CAT_COLOR[rowSeats[0]?.category] || '#94a3b8';
+            const rowMeta = layoutRows.find(r => r.id === rowId);
+            const rs = orphanRSRef.current[sectionId] || 'line'; // default: thin line
+            const isCurved = !!(rowMeta?.curveCenter && rowMeta.curveRadius != null && rowMeta.curveA0 != null && rowMeta.curveA1 != null);
+
+            if (isCurved) {
+              const [ccx, ccy] = w2s(rowMeta!.curveCenter![0], rowMeta!.curveCenter![1], cam, W, H);
+              const rPx = rowMeta!.curveRadius! * cam.zoom;
+              const a0r = (rowMeta!.curveA0! * Math.PI) / 180;
+              const a1r = (rowMeta!.curveA1! * Math.PI) / 180;
+              if (rs === 'bar') {
+                ctx.beginPath();
+                ctx.arc(ccx, ccy, rPx, a0r, a1r, a1r < a0r);
+                ctx.strokeStyle = col + 'bb';
+                ctx.lineWidth = seatR * 2 + 4;
+                ctx.lineCap = 'butt';
+                ctx.stroke();
+              } else {
+                ctx.beginPath();
+                ctx.arc(ccx, ccy, rPx, a0r, a1r, a1r < a0r);
+                ctx.strokeStyle = col + '55';
+                ctx.lineWidth = Math.max(1, 1.5 * cam.zoom);
+                ctx.stroke();
+              }
+            } else {
+              const first = rowSeats[0], last = rowSeats[rowSeats.length - 1];
+              const [x0, y0] = w2s(first.x, first.y, cam, W, H);
+              const [x1, y1] = w2s(last.x, last.y, cam, W, H);
+              const angle = Math.atan2(y1 - y0, x1 - x0);
+              const seatSpacingPx = rowSeats.length > 1
+                ? Math.hypot(x1 - x0, y1 - y0) / (rowSeats.length - 1)
+                : seatR * 2.5;
+              const ext = seatSpacingPx * 0.5;
+              const dx2 = Math.cos(angle), dy2 = Math.sin(angle);
+
+              // Check if row is curved (seats have varying Y relative to first-last line)
+              const isCurvedRow = rowSeats.some(s => {
+                const [sx, sy] = w2s(s.x, s.y, cam, W, H);
+                const t = rowSeats.length > 1 ? rowSeats.indexOf(s) / (rowSeats.length - 1) : 0.5;
+                const lineY = y0 + t * (y1 - y0);
+                return Math.abs(sy - lineY) > 2;
+              });
+
+              const halfT = seatR + 3;
+              const lineLen = Math.hypot(x1 - x0, y1 - y0) + ext * 2;
+
+              if (rs === 'bar') {
+                if (isCurvedRow) {
+                  // Draw polyline bar through all seats
+                  ctx.beginPath();
+                  rowSeats.forEach((s, i) => {
+                    const [sx, sy] = w2s(s.x, s.y, cam, W, H);
+                    i === 0 ? ctx.moveTo(sx, sy) : ctx.lineTo(sx, sy);
+                  });
+                  ctx.strokeStyle = col + 'bb';
+                  ctx.lineWidth = halfT * 2;
+                  ctx.lineCap = 'round';
+                  ctx.lineJoin = 'round';
+                  ctx.stroke();
+                } else {
+                  ctx.save();
+                  ctx.translate((x0 + x1) / 2, (y0 + y1) / 2);
+                  ctx.rotate(angle);
+                  ctx.beginPath();
+                  (ctx as any).roundRect(-lineLen / 2, -halfT, lineLen, halfT * 2, halfT);
+                  ctx.fillStyle = col + 'bb';
+                  ctx.fill();
+                  ctx.restore();
+                }
+              } else {
+                // Thin guide line — polyline if curved, straight if not
+                ctx.beginPath();
+                if (isCurvedRow) {
+                  rowSeats.forEach((s, i) => {
+                    const [sx, sy] = w2s(s.x, s.y, cam, W, H);
+                    i === 0 ? ctx.moveTo(sx, sy) : ctx.lineTo(sx, sy);
+                  });
+                } else {
+                  ctx.moveTo(x0 - dx2 * ext, y0 - dy2 * ext);
+                  ctx.lineTo(x1 + dx2 * ext, y1 + dy2 * ext);
+                }
+                ctx.strokeStyle = col + '44';
+                ctx.lineWidth = Math.max(1, 1.5 * cam.zoom);
+                ctx.stroke();
+              }
+
+              // Row labels — always outside the bar/line, always visible
+              if (cam.zoom >= 0.2) {
+                const rowLetter = rowSeats[0].label.replace(/\d+$/, '');
+                if (rowLetter) {
+                  const labelSize = Math.max(8, Math.min(13, 9 * cam.zoom));
+                  ctx.font = `700 ${labelSize}px ${FONT}`;
+                  ctx.fillStyle = '#1e293b';
+                  ctx.textBaseline = 'middle';
+                  // Pad = bar half-thickness + spacing so label is always outside
+                  const labelPad = (rs === 'bar' ? halfT : seatR) + 8;
+                  ctx.textAlign = 'right';
+                  ctx.fillText(rowLetter, x0 - dx2 * labelPad, y0 - dy2 * labelPad);
+                  ctx.textAlign = 'left';
+                  ctx.fillText(rowLetter, x1 + dx2 * labelPad, y1 + dy2 * labelPad);
+                }
+              }
+            }
+          });
           ctx.restore();
         });
       }
     }
 
+    // ── TOP-LEVEL: draw ALL curved rows from layout.rows (always visible) ────
+    {
+      const curvedRows = layoutRows.filter(r => r.curveCenter && r.curveRadius != null && r.curveA0 != null && r.curveA1 != null);
+      if (curvedRows.length > 0) {
+        // Group by sectionId to clip each group to its section
+        const bySec = new Map<string, typeof curvedRows>();
+        curvedRows.forEach(r => {
+          if (!bySec.has(r.sectionId)) bySec.set(r.sectionId, []);
+          bySec.get(r.sectionId)!.push(r);
+        });
 
-    texts.forEach(t => {
+        bySec.forEach((rows, sectionId) => {
+          const secShape = shapes.find(s => s.id === sectionId);
+          // Skip if already drawn inside the arc-section block above
+          if (secShape?.arcCenter) return;
+          // Skip if section is seats-only mode
+          if (secShape?.displayMode === 'seats') return;
+
+          const cat = secShape?.category as string || 'STANDARD';
+          const rowCol = TIER_ROW[cat] || '#cbd5e1';
+
+          ctx.save();
+          if (secShape && secShape.vertices.length >= 3) {
+            ctx.beginPath();
+            const [fx, fy] = w2s(secShape.vertices[0][0], secShape.vertices[0][1], cam, W, H);
+            ctx.moveTo(fx, fy);
+            for (let i = 1; i < secShape.vertices.length; i++) {
+              const [px, py] = w2s(secShape.vertices[i][0], secShape.vertices[i][1], cam, W, H);
+              ctx.lineTo(px, py);
+            }
+            ctx.closePath();
+            ctx.clip();
+          }
+
+          rows.forEach((row, ri) => {
+            const isRowSel = sel.has(row.id);
+            const effectiveCol = row.color || rowCol;
+            const [ccx, ccy] = w2s(row.curveCenter![0], row.curveCenter![1], cam, W, H);
+            const rPx = row.curveRadius! * cam.zoom;
+            const a0r = (row.curveA0! * Math.PI) / 180;
+            const a1r = (row.curveA1! * Math.PI) / 180;
+
+            // Band thickness from spacing to next row
+            let thickness = Math.max(6, 10 * cam.zoom);
+            const nextRow = rows[ri + 1];
+            if (nextRow?.curveRadius != null) {
+              thickness = Math.max(5, Math.min(32, (nextRow.curveRadius - row.curveRadius!) * cam.zoom * 0.9));
+            }
+
+            // Filled arc band
+            ctx.beginPath();
+            ctx.arc(ccx, ccy, rPx, a0r, a1r, a1r < a0r);
+            ctx.strokeStyle = effectiveCol;
+            ctx.lineWidth = isRowSel ? thickness + 3 : thickness;
+            ctx.lineCap = 'butt';
+            ctx.stroke();
+
+            // White divider
+            ctx.beginPath();
+            ctx.arc(ccx, ccy, rPx + thickness / 2, a0r, a1r, a1r < a0r);
+            ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+            ctx.lineWidth = Math.max(1, cam.zoom * 0.8);
+            ctx.stroke();
+
+            // Row label on right side
+            if (cam.zoom >= 0.3) {
+              const lx2 = ccx + Math.cos(a1r) * rPx + Math.cos(a1r) * (thickness * 0.5 + 6);
+              const ly2 = ccy + Math.sin(a1r) * rPx + Math.sin(a1r) * (thickness * 0.5 + 6);
+              ctx.font = `500 ${Math.max(6, Math.min(10, 7 * cam.zoom))}px ${FONT}`;
+              ctx.fillStyle = isRowSel ? effectiveCol : '#94a3b8';
+              ctx.textAlign = 'left';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(row.label, lx2, ly2);
+            }
+
+            // Selection glow + handles
+            if (isRowSel) {
+              ctx.beginPath();
+              ctx.arc(ccx, ccy, rPx, a0r, a1r, a1r < a0r);
+              ctx.strokeStyle = effectiveCol;
+              ctx.lineWidth = thickness + 10;
+              ctx.globalAlpha = 0.18;
+              ctx.stroke();
+              ctx.globalAlpha = 1;
+
+              const ep0x = ccx + Math.cos(a0r) * rPx, ep0y = ccy + Math.sin(a0r) * rPx;
+              const ep1x = ccx + Math.cos(a1r) * rPx, ep1y = ccy + Math.sin(a1r) * rPx;
+              const amid = (a0r + a1r) / 2;
+              const rhx = ccx + Math.cos(amid) * (rPx + 16), rhy = ccy + Math.sin(amid) * (rPx + 16);
+              [[ep0x, ep0y, '◂'], [ep1x, ep1y, '▸'], [rhx, rhy, '↕']].forEach(([hx, hy, icon]) => {
+                ctx.beginPath();
+                ctx.arc(hx as number, hy as number, 8, 0, Math.PI * 2);
+                ctx.fillStyle = '#fff';
+                ctx.shadowColor = 'rgba(0,0,0,0.2)'; ctx.shadowBlur = 4;
+                ctx.fill(); ctx.shadowBlur = 0;
+                ctx.strokeStyle = effectiveCol; ctx.lineWidth = 2; ctx.stroke();
+                ctx.fillStyle = effectiveCol;
+                ctx.font = `bold 9px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText(icon as string, hx as number, hy as number);
+              });
+            }
+          });
+          ctx.restore();
+        });
+      }
+    }
+
+    // ── Individual seat circles ───────────────────────────────────────────────
+    {
+      const secDisplayMode = new Map(shapes.map(s => [s.id, s.displayMode || 'both']));
+      const shapeIds = new Set(shapes.map(s => s.id));
+
+      const LOD_ROWS_ONLY  = 0.6;
+      const LOD_SEATS_ONLY = 1.0;
+
+      const showSeats = secMode
+        || cam.zoom >= LOD_ROWS_ONLY
+        || seats.some(s => {
+          const dm = shapeIds.has(s.sectionId)
+            ? (secDisplayMode.get(s.sectionId) || 'both')
+            : (orphanDMRef.current[s.sectionId] || 'both');
+          return dm === 'seats';
+        });
+
+      if (showSeats) {
+        // Pre-compute per-row world spacing so radius never causes overlap
+        const rowSpacingMap = new Map<string, number>();
+        const rowGroups = new Map<string, typeof seats>();
+        seats.forEach(s => {
+          const key = s.rowId || s.sectionId;
+          if (!rowGroups.has(key)) rowGroups.set(key, []);
+          rowGroups.get(key)!.push(s);
+        });
+        rowGroups.forEach((rs, key) => {
+          if (rs.length < 2) { rowSpacingMap.set(key, 14); return; }
+          const sorted = [...rs].sort((a, b) => a.number - b.number);
+          const dx = sorted[1].x - sorted[0].x, dy = sorted[1].y - sorted[0].y;
+          rowSpacingMap.set(key, Math.hypot(dx, dy));
+        });
+
+        const showNumber = cam.zoom >= LOD_SEATS_ONLY;
+        const margin = 12;
+
+        seats.forEach(s => {
+          if (secMode && s.sectionId !== secMode) return;
+          const isOrphan = !shapeIds.has(s.sectionId);
+          const dm = isOrphan
+            ? (orphanDMRef.current[s.sectionId] || 'both')
+            : (secDisplayMode.get(s.sectionId) || 'both');
+
+          if (dm === 'rows' && !secMode) return;
+          if (dm === 'both' && !secMode && cam.zoom < LOD_ROWS_ONLY) return;
+
+          const [px, py] = w2s(s.x, s.y, cam, W, H);
+          if (px < -margin || px > W + margin || py < -margin || py > H + margin) return;
+
+          const worldSpacing = rowSpacingMap.get(s.rowId || s.sectionId) ?? 14;
+          const r = Math.max(3, Math.min(10, worldSpacing * cam.zoom * 0.42));
+
+          const isSel = sel.has(s.id);
+          const col = s.color || CAT_COLOR[s.category] || '#64748b';
+          const isSold = s.status === 'sold' || s.status === 'locked';
+          // In bar mode, render seats as white circles so they're visible against the bar
+          const isBarMode = isOrphan && (orphanRSRef.current[s.sectionId] || 'line') === 'bar';
+
+          ctx.beginPath();
+          ctx.arc(px, py, r, 0, Math.PI * 2);
+          ctx.fillStyle = isSel ? '#2563eb' : isSold ? '#94a3b8' : isBarMode ? 'rgba(255,255,255,0.25)' : col + '33';
+          ctx.fill();
+          ctx.strokeStyle = isSel ? '#1d4ed8' : isSold ? '#64748b' : isBarMode ? 'rgba(255,255,255,0.8)' : col;
+          ctx.lineWidth = isSel ? 2 : 1.5;
+          ctx.stroke();
+
+          if (showNumber && r >= 5) {
+            const fontSize = Math.max(6, Math.min(9, r * 0.85));
+            ctx.font = `700 ${fontSize}px ${FONT}`;
+            ctx.fillStyle = isSel ? '#fff' : isSold ? '#fff' : isBarMode ? 'rgba(255,255,255,0.9)' : col;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(String(s.number), px, py);
+          }
+        });
+      }
+    }
+
+
+    if (showLabels && texts) {
+      texts.forEach(t => {
       const [px, py] = w2s(t.x, t.y, cam, W, H);
       const isSel = sel.has(t.id);
       ctx.save();
@@ -532,7 +1071,8 @@ export default function BuilderCanvas(props: Props) {
         ctx.setLineDash([4,3]); ctx.strokeRect(px-tw/2, py-th/2, tw, th); ctx.setLineDash([]);
       }
       ctx.restore();
-    });
+      });
+    }
 
     // ── Draw preview ─────────────────────────────────────────────────────────
     const { tool, pts, mouse, rectStart, arcRowCenter: arcC, arcRowRadius: arcR } = pv;
@@ -558,7 +1098,7 @@ export default function BuilderCanvas(props: Props) {
       ctx.restore();
     }
 
-    if ((tool === 'rect' || tool === 'block' || tool === 'multirow' || tool === 'circle' || tool === 'ellipse' || tool === 'triangle' || tool === 'diamond' || tool === 'pentagon' || tool === 'hexagon' || tool === 'star') && rectStart) {
+    if ((tool === 'rect' || tool === 'block' || tool === 'multirow' || tool === 'seatselect' || tool === 'circle' || tool === 'ellipse' || tool === 'triangle' || tool === 'diamond' || tool === 'pentagon' || tool === 'hexagon' || tool === 'star') && rectStart) {
       const [sx2, sy2] = w2s(rectStart[0], rectStart[1], cam, W, H);
       const [mx, my] = w2s(mouse[0], mouse[1], cam, W, H);
       ctx.save();
@@ -566,7 +1106,11 @@ export default function BuilderCanvas(props: Props) {
       ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 2;
       ctx.fillStyle = 'rgba(37,99,235,0.07)';
 
-      if (tool === 'rect' || tool === 'block' || tool === 'multirow') {
+      if (tool === 'seatselect') {
+        ctx.fillStyle = 'rgba(37,99,235,0.08)';
+        ctx.fillRect(sx2, sy2, mx - sx2, my - sy2);
+        ctx.strokeRect(sx2, sy2, mx - sx2, my - sy2);
+      } else if (tool === 'rect' || tool === 'block' || tool === 'multirow') {
         ctx.fillRect(sx2, sy2, mx - sx2, my - sy2);
         ctx.strokeRect(sx2, sy2, mx - sx2, my - sy2);
 
@@ -699,11 +1243,11 @@ export default function BuilderCanvas(props: Props) {
     }
 
     // ── Hover Tooltip ────────────────────────────────────────────────────────
-    if (tool === 'select') {
+    if (tool === 'select' && showSeats) {
       const { seats } = layoutRef.current;
       const hoverSeat = seats.find(s => {
         if (secMode && s.sectionId !== secMode) return false;
-        return Math.hypot(s.x - mouse[0], s.y - mouse[1]) <= 8 / cam.zoom;
+        return Math.hypot(s.x - mouse[0], s.y - mouse[1]) <= 10;
       });
 
       if (hoverSeat) {

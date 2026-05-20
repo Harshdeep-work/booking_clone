@@ -3,9 +3,9 @@
  */
 'use client';
 import { useState, useRef } from 'react';
-import type { GridConfig, SectionTemplate } from './advancedTools';
-import { SECTION_TEMPLATES, generateSeatGrid, applyTemplate, validateLayout, importFromCSV, exportToCSV, exportToGeoJSON, importFromGeoJSON } from './advancedTools';
-import type { Category, NumberScheme, LayoutState, ValidationResult } from './builderTypes2';
+import type { SectionTemplate } from './advancedTools';
+import { SECTION_TEMPLATES, applyTemplate, validateLayout, importFromCSV, exportToCSV, exportToGeoJSON, importFromGeoJSON, fillArcSectionWithSeats } from './advancedTools';
+import type { LayoutState, ValidationResult } from './builderTypes2';
 
 interface Props {
   layout: LayoutState;
@@ -18,53 +18,40 @@ interface Props {
   onSplitSection?: (id: string, axis: 'h' | 'v') => void;
   onMergeSections?: (ids: string[]) => void;
   onRotate?: (deg: number) => void;
+  onAddAisle?: (sectionId: string, afterSeat: number, width: number, axis: 'v' | 'h') => void;
+  onSetDensity?: (sectionId: string, density: number) => void;
+  onAutoBalance?: (sectionId: string) => void;
   selectedIds?: Set<string>;
-  activeTab?: 'grid' | 'tools' | 'import' | 'validate';
-  onTabChange?: (tab: 'grid' | 'tools' | 'import' | 'validate') => void;
+  activeTab?: 'tools' | 'spacing' | 'import' | 'validate';
+  onTabChange?: (tab: 'tools' | 'spacing' | 'import' | 'validate') => void;
 }
 
-export default function AdvancedToolsPanel({ layout, selectedSectionId, onApplyGrid, onApplyTemplate, onImport, onExport, onValidate, onSplitSection, onMergeSections, onRotate, selectedIds, activeTab, onTabChange }: Props) {
-  const [localTab, setLocalTab] = useState<'grid' | 'tools' | 'import' | 'validate'>(activeTab ?? 'grid');
+export default function AdvancedToolsPanel({ layout, selectedSectionId, onApplyGrid, onApplyTemplate, onImport, onExport, onValidate, onSplitSection, onMergeSections, onRotate, onAddAisle, onSetDensity, onAutoBalance, selectedIds, activeTab, onTabChange }: Props) {
+  const [localTab, setLocalTab] = useState<'tools' | 'spacing' | 'import' | 'validate'>(activeTab ?? 'tools');
   const tab = activeTab ?? localTab;
   const setTab = onTabChange ?? setLocalTab;
-  const [gridConfig, setGridConfig] = useState<GridConfig>({
-    rows: 10,
-    seatsPerRow: 20,
-    rowSpacing: 12,
-    seatSpacing: 10,
-    curveRadius: 0,
-    aisleAfter: [],
-    startRow: 'A',
-    startNumber: 1,
-    numberScheme: '1,2,3',
-    category: 'STANDARD',
-    basePrice: 100,
-    adaEvery: 0,
-    vomitoryAfter: [],
-    premiumSpacing: false,
-  });
-  const [aisleInput, setAisleInput] = useState('');
-  const [vomInput, setVomInput] = useState('');
   const [rotateAngle, setRotateAngle] = useState(45);
+  const [aisleAfterSeat, setAisleAfterSeat] = useState(6);
+  const [aisleWidth, setAisleWidth] = useState(20);
+  const [density, setDensity] = useState(100);
   const [validation, setValidation] = useState<ValidationResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleGenerateGrid = () => {
+  // Arc fill state
+  const [arcRows, setArcRows] = useState(10);
+  const [arcSeats, setArcSeats] = useState(20);
+  const [arcPrice, setArcPrice] = useState(100);
+
+  const handleFillArc = () => {
     if (!selectedSectionId) return;
     const section = layout.shapes.find(s => s.id === selectedSectionId);
     if (!section) return;
-    const xs = section.vertices.map(v => v[0]);
-    const ys = section.vertices.map(v => v[1]);
-    const bounds = {
-      x0: Math.min(...xs),
-      y0: Math.min(...ys),
-      x1: Math.max(...xs),
-      y1: Math.max(...ys),
-    };
-    
-    const { rows, seats } = generateSeatGrid(selectedSectionId, bounds, gridConfig);
+    const { rows, seats } = fillArcSectionWithSeats(section, {
+      numRows: arcRows, seatsPerRow: arcSeats, basePrice: arcPrice, category: section.category,
+    });
     onApplyGrid(selectedSectionId, rows, seats);
   };
+
 
   const handleApplyTemplate = (template: SectionTemplate) => {
     const shape = applyTemplate(template, { x: 100, y: 100 }, 1.5);
@@ -124,7 +111,7 @@ export default function AdvancedToolsPanel({ layout, selectedSectionId, onApplyG
     <div style={{ width: 320, background: 'var(--panel)', borderLeft: '1px solid var(--border)', display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Tabs */}
       <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg)', flexShrink: 0 }}>
-        {(['grid', 'tools', 'import', 'validate'] as const).map(t => (
+        {(['tools', 'spacing', 'import', 'validate'] as const).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -137,126 +124,140 @@ export default function AdvancedToolsPanel({ layout, selectedSectionId, onApplyG
               cursor: 'pointer', fontFamily: 'inherit',
             }}
           >
-            {t === 'grid' ? 'Grid' : t === 'tools' ? 'Tools' : t === 'import' ? 'I/O' : 'Validate'}
+            {t === 'tools' ? 'Tools' : t === 'spacing' ? 'Spacing' : t === 'import' ? 'I/O' : 'Validate'}
           </button>
         ))}
       </div>
 
       {/* Content */}
       <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-        {tab === 'grid' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+        {tab === 'spacing' && (() => {
+          // Derive section from selected section shape OR from selected seats
+          const activeSectionId: string | null = selectedSectionId
+            || (selectedIds && selectedIds.size > 0
+              ? (layout.seats.find(s => selectedIds!.has(s.id))?.sectionId ?? null)
+              : null)
+            || (layout.seats.length > 0 ? layout.seats[0].sectionId : null);
+
+          // activeSectionId may be '' for unsectioned seats — treat '' as valid
+          const hasSection = activeSectionId !== null && activeSectionId !== undefined;
+
+          return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {!hasSection && (
+              <div style={{ fontSize: 11, color: 'var(--text-3)', padding: '12px', background: 'var(--bg)', borderRadius: 8, textAlign: 'center' }}>
+                Select a section or seats to use spacing tools
+              </div>
+            )}
+
+            {/* Vertical Aisle */}
             <div>
-              <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)', marginBottom: 12 }}>Seat Grid Generator</h3>
-              <p style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 16 }}>Generate seats in bulk for selected section</p>
-            </div>
-
-            <div style={fieldGroup}>
-              <label style={label}>Rows</label>
-              <input type="number" value={gridConfig.rows} onChange={e => setGridConfig({ ...gridConfig, rows: +e.target.value })} style={input} min={1} max={50} />
-            </div>
-
-            <div style={fieldGroup}>
-              <label style={label}>Seats per Row</label>
-              <input type="number" value={gridConfig.seatsPerRow} onChange={e => setGridConfig({ ...gridConfig, seatsPerRow: +e.target.value })} style={input} min={1} max={100} />
-            </div>
-
-            <div style={fieldGroup}>
-              <label style={label}>Row Spacing</label>
-              <input type="number" value={gridConfig.rowSpacing} onChange={e => setGridConfig({ ...gridConfig, rowSpacing: +e.target.value })} style={input} min={5} max={30} />
-            </div>
-
-            <div style={fieldGroup}>
-              <label style={label}>Seat Spacing</label>
-              <input type="number" value={gridConfig.seatSpacing} onChange={e => setGridConfig({ ...gridConfig, seatSpacing: +e.target.value })} style={input} min={5} max={20} />
-            </div>
-
-            <div style={fieldGroup}>
-              <label style={label}>Curve Radius (0 = straight)</label>
-              <input type="number" value={gridConfig.curveRadius || 0} onChange={e => setGridConfig({ ...gridConfig, curveRadius: +e.target.value || undefined })} style={input} min={0} max={500} />
-            </div>
-
-            <div style={fieldGroup}>
-              <label style={label}>Start Row</label>
-              <input type="text" value={gridConfig.startRow} onChange={e => setGridConfig({ ...gridConfig, startRow: e.target.value.toUpperCase() })} style={input} maxLength={1} />
-            </div>
-
-            <div style={fieldGroup}>
-              <label style={label}>Number Scheme</label>
-              <select value={gridConfig.numberScheme} onChange={e => setGridConfig({ ...gridConfig, numberScheme: e.target.value as NumberScheme })} style={input}>
-                <option value="1,2,3">1, 2, 3...</option>
-                <option value="odd">Odd (1, 3, 5...)</option>
-                <option value="even">Even (2, 4, 6...)</option>
-                <option value="rtl">Right to Left</option>
-              </select>
-            </div>
-
-            <div style={fieldGroup}>
-              <label style={label}>Category</label>
-              <select value={gridConfig.category} onChange={e => setGridConfig({ ...gridConfig, category: e.target.value as Category })} style={input}>
-                <option value="VIP">VIP</option>
-                <option value="PREMIUM">Premium</option>
-                <option value="STANDARD">Standard</option>
-                <option value="BUDGET">Budget</option>
-                <option value="GA">General Admission</option>
-              </select>
-            </div>
-
-            <div style={fieldGroup}>
-              <label style={label}>Base Price ($)</label>
-              <input type="number" value={gridConfig.basePrice} onChange={e => setGridConfig({ ...gridConfig, basePrice: +e.target.value })} style={input} min={10} max={5000} />
-            </div>
-
-            {/* ── Advanced spacing ── */}
-            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
-              <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 10 }}>Advanced Spacing</div>
-
+              <div style={sectionLabel}>Vertical Aisle</div>
+              <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10 }}>Insert a gap after seat # in every row</p>
               <div style={fieldGroup}>
-                <label style={label}>Aisle after seat # (comma-separated)</label>
-                <input type="text" value={aisleInput} placeholder="e.g. 5,10,15"
-                  onChange={e => {
-                    setAisleInput(e.target.value);
-                    const nums = e.target.value.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n));
-                    setGridConfig(c => ({ ...c, aisleAfter: nums }));
-                  }} style={input} />
+                <label style={label}>After seat #</label>
+                <input type="number" value={aisleAfterSeat} min={1} max={100}
+                  onChange={e => setAisleAfterSeat(+e.target.value)} style={input} />
               </div>
-
-              <div style={fieldGroup}>
-                <label style={label}>Vomitory after row # (comma-separated)</label>
-                <input type="text" value={vomInput} placeholder="e.g. 5,10"
-                  onChange={e => {
-                    setVomInput(e.target.value);
-                    const nums = e.target.value.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n));
-                    setGridConfig(c => ({ ...c, vomitoryAfter: nums }));
-                  }} style={input} />
+              <div style={{ ...fieldGroup, marginTop: 8 }}>
+                <label style={label}>Aisle width (units)</label>
+                <input type="number" value={aisleWidth} min={5} max={100}
+                  onChange={e => setAisleWidth(+e.target.value)} style={input} />
               </div>
-
-              <div style={fieldGroup}>
-                <label style={label}>ADA seat every N seats (0 = off)</label>
-                <input type="number" value={gridConfig.adaEvery ?? 0}
-                  onChange={e => setGridConfig(c => ({ ...c, adaEvery: +e.target.value }))}
-                  style={input} min={0} max={20} />
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0' }}>
-                <span style={label}>Premium spacing (+20%)</span>
-                <label className="tf-toggle">
-                  <input type="checkbox" checked={!!gridConfig.premiumSpacing}
-                    onChange={e => setGridConfig(c => ({ ...c, premiumSpacing: e.target.checked }))} />
-                  <span className="tf-toggle-track" />
-                </label>
-              </div>
+              <button disabled={!hasSection}
+                onClick={() => hasSection && onAddAisle?.(activeSectionId!, aisleAfterSeat, aisleWidth, 'v')}
+                style={{ ...primaryBtn, marginTop: 10, width: '100%', opacity: hasSection ? 1 : 0.5 }}>
+                Add Vertical Aisle
+              </button>
             </div>
 
-            <button onClick={handleGenerateGrid} style={primaryBtn} disabled={!selectedSectionId}>
-              {selectedSectionId ? 'Generate Seats' : 'Select a Section First'}
-            </button>          </div>
-        )}
+            {/* Horizontal Gap */}
+            <div>
+              <div style={sectionLabel}>Horizontal Row Gap</div>
+              <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10 }}>Insert extra spacing after row # (every N rows)</p>
+              <div style={fieldGroup}>
+                <label style={label}>After every N rows</label>
+                <input type="number" value={aisleAfterSeat} min={1} max={50}
+                  onChange={e => setAisleAfterSeat(+e.target.value)} style={input} />
+              </div>
+              <div style={{ ...fieldGroup, marginTop: 8 }}>
+                <label style={label}>Gap height (units)</label>
+                <input type="number" value={aisleWidth} min={5} max={100}
+                  onChange={e => setAisleWidth(+e.target.value)} style={input} />
+              </div>
+              <button disabled={!hasSection}
+                onClick={() => hasSection && onAddAisle?.(activeSectionId!, aisleAfterSeat, aisleWidth, 'h')}
+                style={{ ...primaryBtn, marginTop: 10, width: '100%', opacity: hasSection ? 1 : 0.5 }}>
+                Add Horizontal Gap
+              </button>
+            </div>
+
+            {/* Seat Density */}
+            <div>
+              <div style={sectionLabel}>Seat Density</div>
+              <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10 }}>Scale spacing between all seats in section</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                <input type="range" min={50} max={200} value={density}
+                  onChange={e => setDensity(+e.target.value)}
+                  style={{ flex: 1 }} />
+                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-1)', minWidth: 36 }}>{density}%</span>
+              </div>
+              <button disabled={!hasSection}
+                onClick={() => hasSection && onSetDensity?.(activeSectionId!, density / 100)}
+                style={{ ...primaryBtn, width: '100%', opacity: hasSection ? 1 : 0.5 }}>
+                Apply Density
+              </button>
+            </div>
+
+            {/* Auto Balance */}
+            <div>
+              <div style={sectionLabel}>Auto Balance</div>
+              <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10 }}>Redistribute seats symmetrically around section center</p>
+              <button disabled={!hasSection}
+                onClick={() => hasSection && onAutoBalance?.(activeSectionId!)}
+                style={{ ...primaryBtn, width: '100%', opacity: hasSection ? 1 : 0.5 }}>
+                Auto Balance Seats
+              </button>
+            </div>
+          </div>
+          );
+        })()}
 
         {tab === 'tools' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-            {/* Section Templates */}
+            {/* Arc Section Fill */}
+            <div>
+              <div style={sectionLabel}>Fill Arc Section with Seats</div>
+              <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10 }}>
+                Select a ring/arc section, then generate curved rows that follow its shape.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                <div>
+                  <label style={label}>Rows</label>
+                  <input type="number" min={1} max={50} value={arcRows} onChange={e => setArcRows(+e.target.value)} style={input} />
+                </div>
+                <div>
+                  <label style={label}>Seats / row</label>
+                  <input type="number" min={1} max={100} value={arcSeats} onChange={e => setArcSeats(+e.target.value)} style={input} />
+                </div>
+              </div>
+              <div style={{ marginBottom: 8 }}>
+                <label style={label}>Base Price ($)</label>
+                <input type="number" min={0} value={arcPrice} onChange={e => setArcPrice(+e.target.value)} style={input} />
+              </div>
+              <button
+                disabled={!selectedSectionId}
+                onClick={handleFillArc}
+                style={{ ...primaryBtn, width: '100%', opacity: selectedSectionId ? 1 : 0.5 }}
+              >
+                ⚡ Fill Arc with Seats
+              </button>
+              {!selectedSectionId && (
+                <p style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 6, textAlign: 'center' }}>Select a section first</p>
+              )}
+            </div>
             <div>
               <div style={sectionLabel}>Section Templates</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
@@ -438,7 +439,7 @@ const sectionLabel: React.CSSProperties = {
 const input: React.CSSProperties = {
   padding: '7px 10px',
   fontSize: 12,
-  border: '1px solid var(--border)',
+  border: 'none',
   borderRadius: 8,
   background: 'var(--bg)',
   color: 'var(--text-1)',

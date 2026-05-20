@@ -27,7 +27,7 @@ const SHAPE_TOOLS: { id: ToolId; label: string; key: string; svg: React.ReactNod
 
 function ShapeGrid({ activeTool, onTool }: { activeTool: ToolId; onTool: (t: ToolId) => void }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4, padding: '4px 0 8px' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4, padding: '4px 0 8px' }}>
       {SHAPE_TOOLS.map(s => {
         const active = activeTool === s.id;
         return (
@@ -78,20 +78,6 @@ const SHAPE_INSERTS: ShapeInsert[] = [
     build: () => { const v: [number,number][] = [[-60,-40],[60,-40],[60,40],[-60,40]]; return { shapes: [{ id: `ga-${uid()}`, type: 'ga', label: 'GA PIT', category: 'GA', color: CAT_COLOR.GA, vertices: v, cx: 0, cy: 0 }] }; } },
   { id: 'suite',      label: 'Suite',      icon: '🏆', bg: '#fffbeb', border: '#fde68a', color: '#92400e',
     build: () => { const v: [number,number][] = [[-30,-12],[30,-12],[30,12],[-30,12]]; return { shapes: [{ id: `suite-${uid()}`, type: 'suite', label: 'SUITE', category: 'VIP', color: '#d97706', vertices: v, cx: 0, cy: 0 }] }; } },
-  { id: 'pressbox',   label: 'Press Box',  icon: '📡', bg: '#f0f9ff', border: '#bae6fd', color: '#0369a1',
-    build: () => { const v: [number,number][] = [[-40,-15],[40,-15],[40,15],[-40,15]]; return { shapes: [{ id: `press-${uid()}`, type: 'pressbox', label: 'PRESS', category: 'GA', color: '#0284c7', vertices: v, cx: 0, cy: 0 }] }; } },
-  { id: 'scoreboard', label: 'Scoreboard', icon: '📺', bg: '#1e293b', border: '#f59e0b', color: '#fbbf24',
-    build: () => { const v: [number,number][] = [[-25,-15],[25,-15],[25,15],[-25,15]]; return { shapes: [{ id: `score-${uid()}`, type: 'scoreboard', label: 'SCORE', category: 'GA', color: '#f59e0b', vertices: v, cx: 0, cy: 0 }] }; } },
-  { id: 'tunnel',     label: 'Tunnel',     icon: '🚪', bg: '#f8fafc', border: '#e2e8f0', color: '#64748b',
-    build: () => { const v: [number,number][] = [[-15,-20],[15,-20],[15,20],[-15,20]]; return { shapes: [{ id: `tunnel-${uid()}`, type: 'tunnel', label: 'TUNNEL', category: 'GA', color: '#94a3b8', vertices: v, cx: 0, cy: 0 }] }; } },
-  { id: 'concourse',  label: 'Concourse',  icon: '🔄', bg: '#f8fafc', border: '#e2e8f0', color: '#94a3b8',
-    build: () => { const v: [number,number][] = [[-120,-20],[120,-20],[120,20],[-120,20]]; return { shapes: [{ id: `conc-${uid()}`, type: 'concourse', label: 'CONCOURSE', category: 'GA', color: '#cbd5e1', vertices: v, cx: 0, cy: 0 }] }; } },
-  { id: 'ada',        label: 'ADA',        icon: '♿', bg: '#eff6ff', border: '#bfdbfe', color: '#2563eb',
-    build: () => { const v: [number,number][] = [[-20,-12],[20,-12],[20,12],[-20,12]]; return { shapes: [{ id: `ada-${uid()}`, type: 'ada', label: 'ADA', category: 'GA', color: '#3b82f6', vertices: v, cx: 0, cy: 0 }] }; } },
-  { id: 'vip-box',    label: 'VIP Box',    icon: '⭐', bg: '#faf5ff', border: '#e9d5ff', color: '#7c3aed',
-    build: () => { const v: [number,number][] = [[-25,-15],[25,-15],[25,15],[-25,15]]; return { shapes: [{ id: `vip-${uid()}`, type: 'suite', label: 'VIP', category: 'VIP', color: '#a855f7', vertices: v, cx: 0, cy: 0 }] }; } },
-  { id: 'section',    label: 'Section',    icon: '⬡', bg: '#eff6ff', border: '#bfdbfe', color: '#2563eb',
-    build: () => { const v: [number,number][] = [[-50,-35],[50,-35],[50,35],[-50,35]]; return { shapes: [{ id: `sec-${uid()}`, type: 'section', label: 'SEC', category: 'STANDARD', color: CAT_COLOR.STANDARD, vertices: v, cx: 0, cy: 0 }] }; } },
 ];
 
 const PRESETS: ShapePreset[] = [
@@ -224,7 +210,7 @@ interface Props {
   onSnap: () => void;
   onInsertPreset: (patch: Partial<LayoutState>) => void;
   onDialog: (d: 'ring' | 'arc' | 'block') => void;
-  onOpenAdvanced: (tab: 'grid' | 'tools' | 'import' | 'validate') => void;
+  onOpenAdvanced: (tab: 'tools' | 'spacing' | 'import' | 'validate') => void;
 }
 
 const SECTION_LABEL: React.CSSProperties = {
@@ -234,7 +220,7 @@ const SECTION_LABEL: React.CSSProperties = {
 
 export default function LeftPanel({ activeTool, onTool, snapOn, onSnap, onInsertPreset, onDialog, onOpenAdvanced }: Props) {
   return (
-    <div style={{ width: 200, background: 'var(--panel)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', flexShrink: 0, overflowY: 'auto' }}>
+    <div style={{ width: 200, background: 'var(--panel)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', flexShrink: 0, overflowY: 'auto', overflowX: 'hidden', position: 'relative', zIndex: 10, height: '100%' }}>
 
       {/* ── Tools ── */}
       <div style={{ padding: '0 8px 8px' }}>
@@ -281,7 +267,7 @@ export default function LeftPanel({ activeTool, onTool, snapOn, onSnap, onInsert
       <div style={{ borderTop: '1px solid var(--border-soft)' }}>
         <span style={SECTION_LABEL}>Generate</span>
         <div style={{ padding: '0 8px 8px' }}>
-          <button onClick={() => onOpenAdvanced('grid')}
+          <button onClick={() => onOpenAdvanced('tools')}
             style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '7px 10px', borderRadius: 8, border: 'none', marginBottom: 2, background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 12, fontWeight: 500, transition: 'all 0.1s', textAlign: 'left', fontFamily: 'inherit' }}
             onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg)'}
             onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = 'transparent'}

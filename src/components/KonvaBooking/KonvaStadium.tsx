@@ -5,6 +5,7 @@ import {
   SECTIONS, TIER_COLOR, TIER_GLOW, generateSeats,
   type Section, type Seat, type Tier,
 } from './stadiumData';
+import { unpackLayout } from '../../utils/stadiumOptimizer';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const WORLD = 300;          // half-size of world in world units
@@ -79,6 +80,48 @@ export default function KonvaStadium({ selectedIds, onSeatToggle, onSectionHover
   const [hoveredSecId, setHoveredSecId] = useState<string | null>(null);
   const [hoveredSeatId, setHoveredSeatId] = useState<string | null>(null);
   const [zoom, setZoom] = useState<ZoomState>({ level: 1, sectionId: null, tx: 0, ty: 0, scale: 1 });
+
+  // ── Seat hover tooltip state ───────────────────────────────────────────────
+  const [seatTooltip, setSeatTooltip] = useState<{
+    x: number; y: number;
+    seat: Seat; section: Section;
+  } | null>(null);
+
+  // ── Load custom venue from localStorage ───────────────────────────────────
+  const [customSections, setCustomSections] = useState<Section[] | null>(null);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('ticketflow_live_preview');
+      if (!raw) return;
+      const compact = JSON.parse(raw);
+      const layout = unpackLayout(compact);
+      // Convert builder shapes → Section format for the 2D viewer
+      const sections: Section[] = layout.shapes
+        .filter(sh => sh.type === 'section' || sh.type === 'ga')
+        .map((sh, i) => {
+          const shSeats = layout.seats.filter(s => s.sectionId === sh.id);
+          const prices = shSeats.map(s => s.price);
+          const minPrice = prices.length ? Math.min(...prices) : 0;
+          const angleStep = (360 / Math.max(layout.shapes.length, 1));
+          return {
+            id: sh.id,
+            label: sh.label,
+            tier: (sh.category as any) || 'Standard',
+            innerR: 80 + i * 10,
+            outerR: 120 + i * 10,
+            angleStart: i * angleStep - 180,
+            angleEnd: (i + 1) * angleStep - 180,
+            price: minPrice,
+            priceMax: minPrice,
+            available: shSeats.filter(s => s.status === 'available').length,
+            total: shSeats.length,
+          } as Section;
+        });
+      if (sections.length > 0) setCustomSections(sections);
+    } catch { /* ignore parse errors */ }
+  }, []);
+
+  const activeSections = customSections ?? SECTIONS;
 
   // pan state
   const isPanning = useRef(false);
@@ -211,10 +254,10 @@ export default function KonvaStadium({ selectedIds, onSeatToggle, onSectionHover
   // ── Visible seats (only when zoomed in) ───────────────────────────────────
   const visibleSeats: Seat[] = [];
   if (zoom.level >= 2 && zoom.sectionId) {
-    const sec = SECTIONS.find(s => s.id === zoom.sectionId);
+    const sec = activeSections.find(s => s.id === zoom.sectionId);
     if (sec) visibleSeats.push(...getSeats(sec));
   } else if (zoom.level >= 3) {
-    SECTIONS.forEach(sec => visibleSeats.push(...getSeats(sec)));
+    activeSections.forEach(sec => visibleSeats.push(...getSeats(sec)));
   }
 
   const showLabels = zoom.scale < 4;
@@ -270,7 +313,7 @@ export default function KonvaStadium({ selectedIds, onSeatToggle, onSectionHover
 
         {/* ── Sections ── */}
         <g style={{ transition: 'opacity 0.3s' }} opacity={showSections ? 1 : 0.15}>
-          {SECTIONS.map(sec => {
+          {activeSections.map(sec => {
             const isHov = hoveredSecId === sec.id;
             const isFocused = zoom.sectionId === sec.id;
             const path = arcPath(0, 0, sec.innerR, sec.outerR, sec.angleStart, sec.angleEnd);
@@ -365,7 +408,7 @@ export default function KonvaStadium({ selectedIds, onSeatToggle, onSectionHover
           const isSelected = selectedIds.has(seat.id);
           const isHov = hoveredSeatId === seat.id;
           const isBooked = seat.status === 'booked';
-          const sec = SECTIONS.find(s => s.id === seat.sectionId)!;
+          const sec = activeSections.find(s => s.id === seat.sectionId)!;
           const r = (isHov ? SEAT_R_HOVER : SEAT_R) * sc;
 
           let fill = TIER_COLOR[sec.tier];
@@ -385,8 +428,17 @@ export default function KonvaStadium({ selectedIds, onSeatToggle, onSectionHover
                 cursor: isBooked ? 'not-allowed' : 'pointer',
                 transition: 'r 0.15s, fill 0.15s',
               }}
-              onMouseEnter={() => setHoveredSeatId(seat.id)}
-              onMouseLeave={() => setHoveredSeatId(null)}
+              onMouseEnter={(e) => {
+                setHoveredSeatId(seat.id);
+                const rect = svgRef.current!.getBoundingClientRect();
+                setSeatTooltip({
+                  x: e.clientX - rect.left,
+                  y: e.clientY - rect.top,
+                  seat,
+                  section: sec!,
+                });
+              }}
+              onMouseLeave={() => { setHoveredSeatId(null); setSeatTooltip(null); }}
               onClick={e => onSeatClick(e, seat)}
             />
           );
@@ -489,6 +541,52 @@ export default function KonvaStadium({ selectedIds, onSeatToggle, onSectionHover
           ))}
         </div>
       </div>
+
+      {/* ── Seat hover tooltip ── */}
+      <AnimatePresence>
+        {seatTooltip && (
+          <motion.div
+            key="seat-tooltip"
+            initial={{ opacity: 0, y: 6, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 4, scale: 0.96 }}
+            transition={{ duration: 0.12 }}
+            style={{
+              position: 'absolute',
+              left: seatTooltip.x + 14,
+              top: seatTooltip.y - 10,
+              pointerEvents: 'none',
+              zIndex: 100,
+              background: 'rgba(8,12,24,0.97)',
+              backdropFilter: 'blur(20px)',
+              border: `1px solid ${TIER_COLOR[seatTooltip.section.tier]}44`,
+              borderRadius: 10,
+              padding: '10px 14px',
+              minWidth: 160,
+              boxShadow: '0 12px 40px rgba(0,0,0,0.7)',
+              fontFamily: 'Inter,Outfit,sans-serif',
+            }}
+          >
+            <div style={{ fontSize: 10, fontWeight: 700, color: '#4b5563', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>
+              {seatTooltip.section.label}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px', fontSize: 11 }}>
+              <span style={{ color: '#64748b' }}>Row</span>
+              <span style={{ color: '#f1f5f9', fontWeight: 700 }}>{seatTooltip.seat.row}</span>
+              <span style={{ color: '#64748b' }}>Seat</span>
+              <span style={{ color: '#f1f5f9', fontWeight: 700 }}>{seatTooltip.seat.number}</span>
+              <span style={{ color: '#64748b' }}>Tier</span>
+              <span style={{ color: TIER_COLOR[seatTooltip.section.tier], fontWeight: 700 }}>{seatTooltip.section.tier}</span>
+              <span style={{ color: '#64748b' }}>Price</span>
+              <span style={{ color: '#10b981', fontWeight: 800 }}>${seatTooltip.seat.price}</span>
+              <span style={{ color: '#64748b' }}>Status</span>
+              <span style={{ color: seatTooltip.seat.status === 'booked' ? '#ef4444' : '#10b981', fontWeight: 700, textTransform: 'capitalize' }}>
+                {seatTooltip.seat.status}
+              </span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

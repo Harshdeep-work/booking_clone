@@ -51,6 +51,10 @@ export default function GenerateDialogs({ open, onClose, onApply }: Props) {
       shapes.push({ id: `ring-${Date.now()}-${i}`, type: 'section', label: `Sec ${i + 1}`, category: cat, color: CAT_COLOR[cat], vertices: verts, cx, cy });
     }
     onApply({ shapes });
+    // Advance radii outward for next ring
+    const thickness = rOuter - rInner;
+    setRInner(rOuter);
+    setROuter(rOuter + thickness);
     onClose();
   };
 

@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CATS, CAT_COLOR, type BShape, type BSeat, type BText, type Category, type SeatStatus } from './builderTypes2';
 
@@ -45,22 +45,23 @@ const SEL: React.CSSProperties = { ...INP, cursor: 'pointer', appearance: 'none'
 const GRP: React.CSSProperties = { padding: '14px 16px', borderBottom: '1px solid #f1f5f9' };
 const SEC_HDR: React.CSSProperties = { fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, padding: '10px 16px 6px', background: '#f8fafc', borderBottom: '1px solid #f1f5f9' };
 
-function CatPills({ value, onChange }: { value: Category; onChange: (c: Category) => void }) {
+function CatPills({ value, onChange, categories = ['VIP', 'PREMIUM', 'STANDARD', 'BUDGET', 'GA'] }: { value: Category; onChange: (c: Category) => void; categories?: string[] }) {
   return (
     <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 12 }}>
-      {CATS.map(c => {
+      {categories.map(c => {
         const active = value === c;
+        const col = CAT_COLOR[c as Category] || '#3b82f6';
         return (
-          <button key={c} onClick={() => onChange(c)} style={{
+          <button key={c} onClick={() => onChange(c as Category)} style={{
             display: 'flex', alignItems: 'center', gap: 4,
             padding: '5px 11px', borderRadius: 99, fontSize: 11, fontWeight: 700, cursor: 'pointer',
-            border: `1.5px solid ${active ? CAT_COLOR[c] : '#e2e8f0'}`,
-            background: active ? CAT_COLOR[c] + '18' : '#f8fafc',
-            color: active ? CAT_COLOR[c] : '#475569',
+            border: `1.5px solid ${active ? col : '#e2e8f0'}`,
+            background: active ? col + '18' : '#f8fafc',
+            color: active ? col : '#475569',
             transition: 'all 0.12s',
-            boxShadow: active ? `0 0 0 3px ${CAT_COLOR[c]}22` : 'none',
+            boxShadow: active ? `0 0 0 3px ${col}22` : 'none',
           }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: CAT_COLOR[c], flexShrink: 0, opacity: active ? 1 : 0.5 }} />
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: col, flexShrink: 0, opacity: active ? 1 : 0.5 }} />
             {c}
           </button>
         );
@@ -74,8 +75,32 @@ export default function PropertiesPanel(props: Props) {
     onMultiCategory, onMultiPrice, onMultiStatus, onDelete, onFillSection, sectionMode,
     totalElements, totalSeats, totalSections, selectedCount } = props;
 
-  const [rowCurve, setRowCurve] = useState(0);
+  const [rowCurve, setRowCurve]   = useState(0);
   const [rowSpacing, setRowSpacing] = useState(5);
+  const [showCatMgr, setShowCatMgr] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [newCatColor, setNewCatColor] = useState('#3b82f6');
+  const [catsList, setCatsList]     = useState<string[]>(['VIP', 'PREMIUM', 'STANDARD', 'BUDGET', 'GA']);
+
+  // ── Local input state to prevent re-render lag ──────────────────────────
+  const [shapeLabel, setShapeLabel] = useState(shape?.label ?? '');
+  const [seatRow, setSeatRow]       = useState(seat ? seat.label.replace(/\d+$/, '') : '');
+  const [seatNum, setSeatNum]       = useState(seat?.number ?? 0);
+  const [seatPrice, setSeatPrice]   = useState(seat?.price ?? 0);
+  const [seatX, setSeatX]           = useState(seat ? Math.round(seat.x) : 0);
+  const [seatY, setSeatY]           = useState(seat ? Math.round(seat.y) : 0);
+  const [textContent, setTextContent] = useState(text?.text ?? '');
+
+  // Sync local state when selected entity changes
+  useEffect(() => { setShapeLabel(shape?.label ?? ''); }, [shape?.id]); // eslint-disable-line
+  useEffect(() => {
+    setSeatRow(seat ? seat.label.replace(/\d+$/, '') : '');
+    setSeatNum(seat?.number ?? 0);
+    setSeatPrice(seat?.price ?? 0);
+    setSeatX(seat ? Math.round(seat.x) : 0);
+    setSeatY(seat ? Math.round(seat.y) : 0);
+  }, [seat?.id]);
+  useEffect(() => { setTextContent(text?.text ?? ''); }, [text?.id]);
 
   const hasSelection = shape || seat || text || multiCount > 0;
 
@@ -93,8 +118,94 @@ export default function PropertiesPanel(props: Props) {
             background: '#fff', borderLeft: '1px solid #e2e8f0',
             fontFamily: 'Inter,sans-serif', flexShrink: 0, overflowY: 'auto',
             boxShadow: '-4px 0 16px rgba(0,0,0,0.04)',
+            position: 'relative'
           }}
         >
+          {/* Category Manager Modal */}
+          {showCatMgr && (
+            <div style={{
+              position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.96)',
+              zIndex: 50, display: 'flex', flexDirection: 'column', padding: 16,
+              fontFamily: 'Inter,sans-serif'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: 8, marginBottom: 12 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>Manage Pricing Tiers</span>
+                <button
+                  onClick={() => setShowCatMgr(false)}
+                  style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Add New Category */}
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 10, background: '#f8fafc', marginBottom: 16 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 8 }}>Create Custom Category</div>
+                <label style={LBL}>Category Name</label>
+                <input
+                  style={INP}
+                  placeholder="e.g. ULTRA_VIP"
+                  value={newCatName}
+                  onChange={e => setNewCatName(e.target.value.toUpperCase().replace(/\s+/g, '_'))}
+                />
+                <label style={LBL}>Category Color</label>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+                  <input
+                    type="color"
+                    value={newCatColor}
+                    onChange={e => setNewCatColor(e.target.value)}
+                    style={{ width: 34, height: 34, border: '1px solid #e2e8f0', borderRadius: 7, cursor: 'pointer', padding: 2 }}
+                  />
+                  <input
+                    style={{ ...INP, flex: 1, marginBottom: 0, fontFamily: 'monospace', fontSize: 11 }}
+                    value={newCatColor}
+                    onChange={e => setNewCatColor(e.target.value)}
+                  />
+                </div>
+                <button
+                  onClick={() => {
+                    if (newCatName.trim() && !catsList.includes(newCatName)) {
+                      CAT_COLOR[newCatName as Category] = newCatColor;
+                      setCatsList([...catsList, newCatName]);
+                      setNewCatName('');
+                    }
+                  }}
+                  style={{
+                    width: '100%', padding: '7px 0', borderRadius: 7,
+                    border: 'none', background: '#3b82f6', color: '#fff',
+                    fontSize: 12, fontWeight: 700, cursor: 'pointer'
+                  }}
+                >
+                  + Add Category
+                </button>
+              </div>
+
+              {/* Categories List */}
+              <div style={{ flex: 1, overflowY: 'auto' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 8 }}>Active Categories</div>
+                {catsList.map(cat => {
+                  const col = CAT_COLOR[cat as Category] || '#3b82f6';
+                  return (
+                    <div key={cat} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 8px', border: '1px solid #f1f5f9', borderRadius: 6, marginBottom: 4 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: col }} />
+                        <span style={{ fontSize: 11, fontWeight: 600, color: '#0f172a' }}>{cat}</span>
+                      </div>
+                      <input
+                        type="color"
+                        value={col}
+                        onChange={e => {
+                          CAT_COLOR[cat as Category] = e.target.value;
+                          setCatsList([...catsList]); // trigger redraw
+                        }}
+                        style={{ width: 22, height: 22, border: 'none', borderRadius: 4, cursor: 'pointer', padding: 0 }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {/* Header */}
           <div style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -138,9 +249,12 @@ export default function PropertiesPanel(props: Props) {
               <div style={SEC_HDR}>Section Properties</div>
               <div style={{ padding: '12px 16px' }}>
                 <label style={LBL}>Label</label>
-                <input style={INP} value={shape.label} onChange={e => onShape({ label: e.target.value })}
-                  onFocus={e => (e.target as HTMLInputElement).style.borderColor = '#3b82f6'}
-                  onBlur={e => (e.target as HTMLInputElement).style.borderColor = '#e2e8f0'} />
+                <input style={INP}
+                  value={shapeLabel}
+                  onChange={e => setShapeLabel(e.target.value)}
+                  onBlur={() => onShape({ label: shapeLabel })}
+                  onKeyDown={e => e.key === 'Enter' && onShape({ label: shapeLabel })}
+                  onFocus={e => (e.target as HTMLInputElement).style.borderColor = '#3b82f6'} />
 
                 <label style={LBL}>Type</label>
                 <select style={SEL} value={shape.type} onChange={e => onShape({ type: e.target.value as any })}>
@@ -149,19 +263,75 @@ export default function PropertiesPanel(props: Props) {
                   <option value="ga">General Admission</option>
                 </select>
 
-                <label style={LBL}>Pricing Tier</label>
-                <CatPills value={shape.category} onChange={c => onShape({ category: c, color: CAT_COLOR[c] })} />
-
-                <label style={LBL}>Base Price ($)</label>
-                <input style={INP} type="number" placeholder="e.g. 150"
-                  onFocus={e => (e.target as HTMLInputElement).style.borderColor = '#3b82f6'}
-                  onBlur={e => (e.target as HTMLInputElement).style.borderColor = '#e2e8f0'} />
+                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+                  <label style={{ ...LBL, marginBottom: 0 }}>Pricing Tier</label>
+                  <button
+                    onClick={() => setShowCatMgr(true)}
+                    style={{ background: 'none', border: 'none', color: '#3b82f6', fontSize: 10, fontWeight: 700, cursor: 'pointer', padding: 0 }}
+                  >
+                    Manage
+                  </button>
+                </div>
+                <CatPills value={shape.category} onChange={c => onShape({ category: c, color: CAT_COLOR[c] || '#3b82f6' })} categories={catsList} />
 
                 <label style={LBL}>Custom Color</label>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
                   <input type="color" value={shape.color} onChange={e => onShape({ color: e.target.value })}
                     style={{ width: 34, height: 34, border: '1px solid #e2e8f0', borderRadius: 7, cursor: 'pointer', padding: 2 }} />
                   <input style={{ ...INP, flex: 1, marginBottom: 0, fontFamily: 'monospace', fontSize: 11 }} value={shape.color} onChange={e => onShape({ color: e.target.value })} />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#64748b', marginBottom: 4 }}>
+                  <label style={LBL}>Scale</label>
+                  <span style={{ fontWeight: 700, color: '#0f172a' }}>{Math.round((shape.scale ?? 1) * 100)}%</span>
+                </div>
+                <input
+                  type="range" min={0.1} max={3} step={0.05} value={shape.scale ?? 1}
+                  onChange={e => onShape({ scale: +e.target.value })}
+                  style={{ width: '100%', accentColor: '#3b82f6', marginBottom: 12 }}
+                />
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#64748b', marginBottom: 4 }}>
+                  <label style={LBL}>Rotation</label>
+                  <span style={{ fontWeight: 700, color: '#0f172a' }}>{Math.round(shape.rotation ?? 0)}°</span>
+                </div>
+                <input
+                  type="range" min={-180} max={180} step={5} value={shape.rotation ?? 0}
+                  onChange={e => onShape({ rotation: +e.target.value })}
+                  style={{ width: '100%', accentColor: '#3b82f6', marginBottom: 12 }}
+                />
+
+                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ ...LBL, marginBottom: 3 }}>Position X</label>
+                    <input
+                      style={{ ...INP, marginBottom: 0 }}
+                      type="number"
+                      value={Math.round(shape.cx)}
+                      onChange={e => {
+                        const dx = +e.target.value - shape.cx;
+                        onShape({
+                          cx: +e.target.value,
+                          vertices: shape.vertices.map(([x, y]) => [x + dx, y] as [number, number]),
+                        });
+                      }}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ ...LBL, marginBottom: 3 }}>Position Y</label>
+                    <input
+                      style={{ ...INP, marginBottom: 0 }}
+                      type="number"
+                      value={Math.round(shape.cy)}
+                      onChange={e => {
+                        const dy = +e.target.value - shape.cy;
+                        onShape({
+                          cy: +e.target.value,
+                          vertices: shape.vertices.map(([x, y]) => [x, y + dy] as [number, number]),
+                        });
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -213,25 +383,31 @@ export default function PropertiesPanel(props: Props) {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 0 }}>
                   <div>
                     <label style={LBL}>Row</label>
-                    <input style={INP} value={seat.label.replace(/\d+/, '')} onChange={e => onSeat({ label: e.target.value + seat.number })}
-                      onFocus={e => (e.target as HTMLInputElement).style.borderColor = '#3b82f6'}
-                      onBlur={e => (e.target as HTMLInputElement).style.borderColor = '#e2e8f0'} />
+                    <input style={INP} value={seatRow}
+                      onChange={e => setSeatRow(e.target.value)}
+                      onBlur={() => onSeat({ label: seatRow + seat!.number })}
+                      onKeyDown={e => e.key === 'Enter' && onSeat({ label: seatRow + seat!.number })}
+                      onFocus={e => (e.target as HTMLInputElement).style.borderColor = '#3b82f6'} />
                   </div>
                   <div>
                     <label style={LBL}>Number</label>
-                    <input style={INP} type="number" value={seat.number} onChange={e => onSeat({ number: +e.target.value })}
-                      onFocus={e => (e.target as HTMLInputElement).style.borderColor = '#3b82f6'}
-                      onBlur={e => (e.target as HTMLInputElement).style.borderColor = '#e2e8f0'} />
+                    <input style={INP} type="number" value={seatNum}
+                      onChange={e => setSeatNum(+e.target.value)}
+                      onBlur={() => onSeat({ number: seatNum })}
+                      onKeyDown={e => e.key === 'Enter' && onSeat({ number: seatNum })}
+                      onFocus={e => (e.target as HTMLInputElement).style.borderColor = '#3b82f6'} />
                   </div>
                 </div>
 
                 <label style={LBL}>Price ($)</label>
-                <input style={INP} type="number" value={seat.price} onChange={e => onSeat({ price: +e.target.value })}
-                  onFocus={e => (e.target as HTMLInputElement).style.borderColor = '#3b82f6'}
-                  onBlur={e => (e.target as HTMLInputElement).style.borderColor = '#e2e8f0'} />
+                <input style={INP} type="number" value={seatPrice}
+                  onChange={e => setSeatPrice(+e.target.value)}
+                  onBlur={() => onSeat({ price: seatPrice })}
+                  onKeyDown={e => e.key === 'Enter' && onSeat({ price: seatPrice })}
+                  onFocus={e => (e.target as HTMLInputElement).style.borderColor = '#3b82f6'} />
 
                 <label style={LBL}>Pricing Tier</label>
-                <CatPills value={seat.category} onChange={c => onSeat({ category: c })} />
+                <CatPills value={seat.category} onChange={c => onSeat({ category: c })} categories={catsList} />
 
                 <label style={LBL}>Status</label>
                 <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
@@ -253,11 +429,17 @@ export default function PropertiesPanel(props: Props) {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                   <div>
                     <label style={{ ...LBL, marginBottom: 3 }}>X</label>
-                    <input style={{ ...INP, marginBottom: 0 }} type="number" value={Math.round(seat.x)} onChange={e => onSeat({ x: +e.target.value })} />
+                    <input style={{ ...INP, marginBottom: 0 }} type="number" value={seatX}
+                      onChange={e => setSeatX(+e.target.value)}
+                      onBlur={() => onSeat({ x: seatX })}
+                      onKeyDown={e => e.key === 'Enter' && onSeat({ x: seatX })} />
                   </div>
                   <div>
                     <label style={{ ...LBL, marginBottom: 3 }}>Y</label>
-                    <input style={{ ...INP, marginBottom: 0 }} type="number" value={Math.round(seat.y)} onChange={e => onSeat({ y: +e.target.value })} />
+                    <input style={{ ...INP, marginBottom: 0 }} type="number" value={seatY}
+                      onChange={e => setSeatY(+e.target.value)}
+                      onBlur={() => onSeat({ y: seatY })}
+                      onKeyDown={e => e.key === 'Enter' && onSeat({ y: seatY })} />
                   </div>
                 </div>
               </div>
@@ -270,9 +452,11 @@ export default function PropertiesPanel(props: Props) {
               <div style={SEC_HDR}>Text Label</div>
               <div style={{ padding: '12px 16px' }}>
                 <label style={LBL}>Content</label>
-                <input style={INP} value={text.text} onChange={e => onText({ text: e.target.value })}
-                  onFocus={e => (e.target as HTMLInputElement).style.borderColor = '#3b82f6'}
-                  onBlur={e => (e.target as HTMLInputElement).style.borderColor = '#e2e8f0'} />
+                <input style={INP} value={textContent}
+                  onChange={e => setTextContent(e.target.value)}
+                  onBlur={() => onText({ text: textContent })}
+                  onKeyDown={e => e.key === 'Enter' && onText({ text: textContent })}
+                  onFocus={e => (e.target as HTMLInputElement).style.borderColor = '#3b82f6'} />
                 <label style={LBL}>Font Size</label>
                 <input style={INP} type="number" value={text.fontSize} onChange={e => onText({ fontSize: +e.target.value })} />
                 <label style={LBL}>Color</label>

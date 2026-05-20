@@ -5,6 +5,7 @@ import type { ToolId } from './builderTypes2';
 // SVG icons matching MapMyVenue style
 const icons: Record<string, ReactElement> = {
   select: <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 2l10 6-5 1-2 5L3 2z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>,
+  seatselect: <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.4" strokeDasharray="3 2"/><circle cx="5.5" cy="5.5" r="1.2" fill="currentColor"/><circle cx="8" cy="5.5" r="1.2" fill="currentColor"/><circle cx="10.5" cy="5.5" r="1.2" fill="currentColor"/><circle cx="5.5" cy="8" r="1.2" fill="currentColor"/><circle cx="8" cy="8" r="1.2" fill="currentColor"/><circle cx="10.5" cy="8" r="1.2" fill="currentColor"/></svg>,
   section: <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2l5 3v6l-5 3-5-3V5l5-3z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>,
   rect: <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2.5" y="4.5" width="11" height="7" rx="1" stroke="currentColor" strokeWidth="1.5"/></svg>,
   circle: <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.5"/></svg>,
@@ -37,8 +38,9 @@ export const TOOL_GROUPS: { label: string; tools: { id: ToolId; label: string; k
   {
     label: 'Select',
     tools: [
-      { id: 'select', label: 'Select',  key: 'V' },
-      { id: 'pan',    label: 'Pan',     key: 'H' },
+      { id: 'select',      label: 'Select',           key: 'V' },
+      { id: 'seatselect',  label: 'Select Seats Only', key: 'Q' },
+      { id: 'pan',         label: 'Pan',              key: 'H' },
     ],
   },
   {

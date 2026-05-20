@@ -10,7 +10,7 @@ const StadiumViewer = dynamic(() => import('@/components/ThreeViewer/StadiumView
     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8f9fb' }}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
         <div style={{ width: 28, height: 28, border: '2px solid #e5e7eb', borderTopColor: '#4f6ef7', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
-        <span style={{ fontSize: 13, color: '#9ca3af' }}>Loading map</span>
+        <span style={{ fontSize: 13, color: '#9ca3af' }}>Loading 3D view…</span>
       </div>
     </div>
   ),
@@ -63,16 +63,13 @@ export default function HomePage() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <Link href="/booking" style={{ padding: '6px 14px', borderRadius: 7, background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#15803d', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>
-              2D Booking
-            </Link>
             <Link href="/admin" style={{ padding: '6px 14px', borderRadius: 7, background: '#f3f4f6', border: '1px solid #e5e7eb', color: '#374151', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>
               Stadium Builder
             </Link>
           </div>
         </header>
 
-        {/* Body */}
+        {/* Body — always 3D viewer */}
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
           <div style={{ flex: 1, position: 'relative', background: '#f0f2f5' }}>
             <StadiumViewer />

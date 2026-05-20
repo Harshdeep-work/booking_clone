@@ -1,438 +1,302 @@
-# TicketFlow — Project Documentation
+# TicketFlow — Technical Documentation
 
 ## Table of Contents
 
 1. [Project Overview](#1-project-overview)
-2. [Tech Stack](#2-tech-stack)
-3. [Architecture](#3-architecture)
-4. [Project Structure](#4-project-structure)
-5. [Database Schema](#5-database-schema)
-6. [API Reference](#6-api-reference)
-7. [Backend Services](#7-backend-services)
-8. [Frontend Components](#8-frontend-components)
-9. [Real-Time System](#9-real-time-system)
-10. [Admin Builder](#10-admin-builder)
-11. [Environment & Configuration](#11-environment--configuration)
-12. [Setup & Running](#12-setup--running)
+2. [Architecture](#2-architecture)
+3. [Project Structure](#3-project-structure)
+4. [Database Schema](#4-database-schema)
+5. [Backend API](#5-backend-api)
+6. [WebSocket Events](#6-websocket-events)
+7. [Frontend — Booking Experience](#7-frontend--booking-experience)
+8. [Frontend — Admin Builder](#8-frontend--admin-builder)
+9. [Services](#9-services)
+10. [State Management](#10-state-management)
+11. [Data Flow](#11-data-flow)
+12. [Environment Variables](#12-environment-variables)
 13. [Scripts & Commands](#13-scripts--commands)
 
 ---
 
 ## 1. Project Overview
 
-TicketFlow is a production-grade event ticketing platform inspired by StubHub/TickPick. It provides:
+TicketFlow is a production-grade event ticketing platform with two main surfaces:
 
-- A **user-facing booking experience** with a 3D Mapbox stadium map and real-time seat availability.
-- An **admin layout builder** for creating and managing venue seating layouts with professional-grade tools.
-- A **real-time backend** using Socket.IO and Redis to prevent double-booking.
-- A **dynamic pricing engine** that adjusts seat prices based on demand and time-to-event.
+- **Booking Experience** (`/`) — Users browse a 3D stadium map, select seats, and purchase tickets.
+- **Admin Layout Builder** (`/admin`) — Venue operators design seating layouts with a canvas-based editor.
 
-The app runs two concurrent servers:
+**Tech stack:**
 
-- **Next.js 16** (port 3000) — frontend + Next.js API routes (proxy layer)
-- **Express + Socket.IO** (port 4000) — stateful backend for seat locking, WebSocket events, and DB writes
-
----
-
-## 2. Tech Stack
-
-| Layer               | Technology                            |
-| ------------------- | ------------------------------------- |
-| Frontend Framework  | Next.js 16.2.4 (App Router), React 19 |
-| Language            | TypeScript 5                          |
-| Styling             | Tailwind CSS 4, custom CSS            |
-| 3D Map              | Mapbox GL JS 3.x                      |
-| 2D Canvas (Booking) | Konva / react-konva                   |
-| 3D Viewer           | Three.js                              |
-| State Management    | Zustand 5                             |
-| Animation           | Framer Motion 12                      |
-| Backend             | Express 5, Node.js                    |
-| WebSockets          | Socket.IO 4                           |
-| Database            | PostgreSQL 15 (via Prisma 7)          |
-| Cache / Locks       | Redis 7 (ioredis)                     |
-| ORM                 | Prisma 7                              |
-| Drag & Drop         | @dnd-kit                              |
-| Rich Text           | Tiptap 3                              |
-| Icons               | Lucide React                          |
-| Dev Tools           | nodemon, ts-node, concurrently        |
-| Containerization    | Docker Compose                        |
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js 16 (App Router), React, TypeScript |
+| Canvas rendering | HTML5 Canvas (custom 2D engine) |
+| 3D map | Mapbox GL JS with WebGL seat layer |
+| Backend | Express + Socket.IO (custom server, port 4000) |
+| Database | PostgreSQL via Prisma ORM |
+| Cache / Locks | Redis (ioredis) |
+| Real-time | Socket.IO (room-based) |
 
 ---
 
-## 3. Architecture
+## 2. Architecture
 
 ```
 Browser
-  │
-  ├── Next.js (port 3000)
+  ├── Next.js App (port 3000/3001)
   │     ├── /           → Booking page (StadiumMap + BookingSidebar)
-  │     ├── /booking    → Konva-based booking view
-  │     ├── /admin      → Admin Layout Builder
-  │     └── /api/*      → Proxy routes → Express backend
+  │     └── /admin      → Admin builder (VenueBuilder)
   │
-  └── Socket.IO client  ──────────────────────────────────┐
-                                                           │
-Express Server (port 4000)                                 │
-  ├── REST API routes                                      │
-  │     ├── /api/seats          → Seat queries             │
-  │     ├── /api/lock-seat      → Redis SETNX lock         │
-  │     ├── /api/unlock-seat    → Redis DEL unlock         │
-  │     ├── /api/purchase       → Mark seats SOLD in DB    │
-  │     ├── /api/sections       → Section CRUD             │
-  │     ├── /api/layout         → Layout save/load         │
-  │     └── /api/geojson/:id    → Derived GeoJSON          │
-  │                                                        │
-  ├── Socket.IO server  ◄──────────────────────────────────┘
-  │     ├── seat_locked / seat_unlocked / seat_sold events
-  │     ├── section_update (batched every 2s)
-  │     └── bulk_seat_update (on disconnect cleanup)
-  │
-  ├── Redis
-  │     ├── Seat locks (seat:lock:<id>, TTL 10 min)
-  │     ├── GeoJSON cache (geojson:<layoutId>, TTL 5 min)
-  │     └── Pricing cache (pricing:<sectionId>, TTL 30s)
-  │
-  └── PostgreSQL (via Prisma)
-        ├── Event, Layout, Section, Seat
-        ├── PricingRule, Order
-        └── Enums: SeatStatus, SeatCategory, OrderStatus
+  └── Express + Socket.IO (port 4000)
+        ├── REST API  (/api/*)
+        └── WebSocket (Socket.IO)
+              └── Redis (locks + GeoJSON cache)
+                    └── PostgreSQL (persistent data)
 ```
 
 ### Key Design Decisions
 
-- **GeoJSON is never stored as a blob.** It is derived from Section + Seat rows and cached in Redis (5 min TTL). This keeps the DB normalized and GeoJSON always consistent.
-- **Redis is the source of truth for locks.** The DB is only written when a seat is permanently SOLD. This avoids DB contention under high concurrency.
-- **Next.js API routes are thin proxies.** They forward requests to the Express backend and include demo-mode fallbacks so the UI works without a running backend.
-- **Socket.IO uses room-based subscriptions.** Clients join `section:<id>` rooms so they only receive events relevant to the section they are viewing.
+**Derived GeoJSON** — GeoJSON is never stored as a blob in the DB. It is computed from `Section.geometry` + `Seat` coordinates at request time and cached in Redis for 5 minutes. This keeps the DB schema clean and the cache always consistent.
+
+**Redis-only seat locks** — Seat locks are stored exclusively in Redis with a 10-minute TTL using `SETNX` (atomic). The DB is only written when a seat is permanently `SOLD`. This prevents race conditions without DB-level locking.
+
+**Tile-based section loading** — The `/api/sections` endpoint accepts a `bbox` (bounding box) query parameter so the frontend only loads sections visible in the current viewport.
+
+**Spatial indexing** — Each `Seat` stores `x`, `y` (canvas coordinates) and `lng`, `lat` (map coordinates) for instant spatial lookups without geometry parsing.
 
 ---
 
-## 4. Project Structure
+## 3. Project Structure
 
 ```
-booking_clone/
+/
+├── prisma/
+│   ├── schema.prisma          # DB schema (Event, Layout, Section, Seat, Order, PricingRule)
+│   └── seed.ts                # Seeds MetLife Stadium (34 sections, 2500+ seats)
+│
 ├── src/
-│   ├── app/                        # Next.js App Router
-│   │   ├── layout.tsx              # Root layout (CartProvider, SocketProvider)
-│   │   ├── page.tsx                # Home page → StadiumMap booking UI
-│   │   ├── globals.css             # Global styles
-│   │   ├── admin/
-│   │   │   ├── layout.tsx          # Admin layout wrapper
-│   │   │   └── page.tsx            # Admin page → VenueBuilder
-│   │   ├── booking/
-│   │   │   ├── page.tsx            # Booking page
-│   │   │   └── BookingShell.tsx    # Booking shell with Konva stadium
-│   │   └── api/
-│   │       ├── health/route.ts     # GET /api/health
-│   │       ├── lock-seat/route.ts  # POST /api/lock-seat
-│   │       ├── unlock-seat/route.ts# POST /api/unlock-seat
-│   │       ├── purchase/route.ts   # POST /api/purchase
-│   │       ├── layout/route.ts     # POST /api/layout
-│   │       ├── seats/geojson/      # GET /api/seats/geojson
-│   │       └── geojson/[layoutId]/ # GET /api/geojson/:layoutId
+│   ├── app/                   # Next.js App Router
+│   │   ├── page.tsx           # Home / Booking entry point
+│   │   ├── booking/           # Booking page shell
+│   │   ├── admin/             # Admin builder page
+│   │   └── api/               # Next.js API routes (proxy to Express)
+│   │       ├── lock-seat/
+│   │       ├── unlock-seat/
+│   │       ├── purchase/
+│   │       ├── layout/
+│   │       ├── seats/geojson/
+│   │       ├── geojson/[layoutId]/
+│   │       └── health/
 │   │
 │   ├── components/
-│   │   ├── StadiumMap/
-│   │   │   ├── StadiumMap.tsx      # Mapbox GL 3D map with seat layers
-│   │   │   └── SectionTooltip.tsx  # Hover tooltip for sections
-│   │   ├── Sidebar/
-│   │   │   └── BookingSidebar.tsx  # Cart + seat selection sidebar
-│   │   ├── KonvaBooking/
-│   │   │   ├── KonvaStadium.tsx    # Konva 2D stadium canvas
-│   │   │   ├── BookingPanel.tsx    # Booking panel UI
-│   │   │   ├── stadiumData.ts      # Static stadium geometry data
-│   │   │   └── index.tsx           # StadiumBooking export
-│   │   ├── ThreeViewer/
-│   │   │   ├── ThreeViewer.tsx     # Three.js 3D venue viewer
-│   │   │   ├── StadiumViewer.tsx   # Stadium-specific Three.js scene
-│   │   │   └── ViewerSidebar.tsx   # Viewer controls sidebar
-│   │   └── Admin/
-│   │       ├── VenueBuilder.tsx         # Main admin builder UI
-│   │       ├── BuilderCanvas.tsx        # Canvas rendering engine
-│   │       ├── useBuilderEngine.ts      # Core builder state & logic hook
-│   │       ├── AdvancedToolsPanel.tsx   # Grid gen, templates, I/O, validation
-│   │       ├── PropertiesPanel.tsx      # Section/seat property editor
-│   │       ├── EnhancedPropertiesPanel.tsx # Extended metadata editor
-│   │       ├── LeftPanel.tsx            # Shape/section palette
-│   │       ├── LayerPanel.tsx           # Layer visibility controls
-│   │       ├── Toolbar.tsx              # Top toolbar
-│   │       ├── ValidationPanel.tsx      # Validation results display
-│   │       ├── VersionHistory.tsx       # Undo/redo history
-│   │       ├── GenerateDialogs.tsx      # Seat generation dialogs
-│   │       ├── advancedTools.ts         # Algorithms: grid gen, validation, I/O
-│   │       ├── builderTypes.ts          # Base type definitions
-│   │       ├── builderTypes2.ts         # Extended types + geometry helpers
-│   │       ├── types.ts                 # Shared admin types
-│   │       ├── BuilderIcons.tsx         # Icon components
-│   │       ├── BuilderPanels.tsx        # Panel wrappers
-│   │       ├── EmptyState.tsx           # Empty canvas state
-│   │       ├── KonvaEditor.tsx          # Konva-based editor
-│   │       ├── ProBuilder.tsx           # Pro builder variant
-│   │       ├── StadiumAdminBuilder.tsx  # Stadium admin builder
-│   │       ├── StadiumAdminBuilderV2.tsx# V2 stadium admin builder
-│   │       ├── ThreeAdminBuilder.tsx    # Three.js admin builder
-│   │       └── theme.css               # Admin UI theme
+│   │   ├── Admin/             # Admin builder components (see §8)
+│   │   ├── StadiumMap/        # Mapbox booking map
+│   │   ├── KonvaBooking/      # Alternative Konva-based booking view
+│   │   ├── ThreeViewer/       # Three.js 3D preview
+│   │   └── Sidebar/           # Booking sidebar / cart
 │   │
 │   ├── context/
-│   │   ├── CartContext.tsx         # Shopping cart state (useReducer)
-│   │   └── SocketContext.tsx       # Socket.IO connection context
+│   │   ├── SocketContext.tsx  # Socket.IO client + event helpers
+│   │   └── CartContext.tsx    # Shopping cart (useReducer)
 │   │
-│   ├── store/
-│   │   └── viewerStore.ts          # Zustand store for 3D viewer state
+│   ├── server/                # Express backend (runs separately)
+│   │   ├── index.ts           # Server entry point
+│   │   ├── websocket.ts       # Socket.IO server + event emitters
+│   │   ├── routes/
+│   │   │   ├── seats.ts       # GET /api/seats, GET /api/seats/geojson
+│   │   │   ├── sections.ts    # GET /api/sections, GET /api/geojson/:layoutId
+│   │   │   ├── layout.ts      # CRUD /api/layout
+│   │   │   └── seatActions.ts # POST lock/unlock/purchase
+│   │   ├── services/
+│   │   │   ├── lockService.ts     # Redis seat locking
+│   │   │   ├── pricingService.ts  # Dynamic pricing engine
+│   │   │   └── geojsonService.ts  # GeoJSON derivation + Redis cache
+│   │   └── lib/
+│   │       ├── prisma.ts      # Prisma client singleton
+│   │       └── redis.ts       # ioredis client singleton
 │   │
 │   ├── data/
-│   │   ├── stadiumGeometry.ts      # Geometry generation (polar → lat/lng)
-│   │   ├── stadiumEngine.ts        # Section/seat arc geometry engine
-│   │   └── mockLayout.ts           # Mock layout data for demo mode
+│   │   ├── stadiumEngine.ts   # Generates section polygons + seat coordinates
+│   │   ├── stadiumGeometry.ts # Lat/lng polygon generation for Mapbox
+│   │   └── mockLayout.ts      # Fallback layout (no DB required)
 │   │
-│   └── server/
-│       ├── index.ts                # Express app entry point (port 4000)
-│       ├── websocket.ts            # Socket.IO server setup
-│       ├── lib/
-│       │   ├── prisma.ts           # Prisma client singleton
-│       │   └── redis.ts            # ioredis client singleton
-│       ├── routes/
-│       │   ├── seats.ts            # GET /api/seats
-│       │   ├── seatActions.ts      # POST lock/unlock/purchase
-│       │   ├── sections.ts         # Section CRUD + GeoJSON
-│       │   └── layout.ts           # Layout save/load
-│       └── services/
-│           ├── lockService.ts      # Redis seat locking logic
-│           ├── pricingService.ts   # Dynamic pricing engine
-│           └── geojsonService.ts   # GeoJSON derivation + caching
-│
-├── prisma/
-│   ├── schema.prisma               # DB schema
-│   └── seed.ts                     # MetLife Stadium seed data
-│
-├── scripts/
-│   └── migrate-advanced-features.sh
-│
-├── public/                         # Static assets
-├── docker-compose.yml              # PostgreSQL + Redis containers
-├── next.config.js                  # Next.js config
-├── tsconfig.json                   # Frontend TypeScript config
-├── tsconfig.server.json            # Backend TypeScript config
-└── package.json
+│   └── utils/
+│       └── stadiumOptimizer.ts # Layout pack/unpack for localStorage persistence
 ```
 
 ---
 
-## 5. Database Schema
+## 4. Database Schema
 
 ### Models
 
-#### Event
-
+#### `Event`
 Represents a ticketed event (concert, game, etc.).
 
-| Field    | Type          | Description           |
-| -------- | ------------- | --------------------- |
-| id       | String (UUID) | Primary key           |
-| name     | String        | Event name            |
-| date     | DateTime      | Event date/time       |
-| venue    | String        | Venue name            |
-| city     | String        | City                  |
-| imageUrl | String?       | Optional banner image |
-| layouts  | Layout[]      | Associated layouts    |
+| Field | Type | Description |
+|---|---|---|
+| `id` | UUID | Primary key |
+| `name` | String | Event name |
+| `date` | DateTime | Event date/time |
+| `venue` | String | Venue name |
+| `city` | String | City |
+| `imageUrl` | String? | Promotional image |
 
-#### Layout
+#### `Layout`
+A versioned seating layout for an event. Multiple versions can exist; only one is `isActive`.
 
-A versioned seating layout for an event. Only one layout is active at a time.
+| Field | Type | Description |
+|---|---|---|
+| `id` | UUID | Primary key |
+| `eventId` | UUID | FK → Event |
+| `version` | Int | Auto-incremented version number |
+| `name` | String | Layout name |
+| `isActive` | Boolean | Whether this is the live layout |
 
-| Field    | Type          | Description                       |
-| -------- | ------------- | --------------------------------- |
-| id       | String (UUID) | Primary key                       |
-| eventId  | String        | FK → Event                        |
-| version  | Int           | Version number (unique per event) |
-| name     | String        | Layout name                       |
-| isActive | Boolean       | Whether this is the live layout   |
-| sections | Section[]     | Sections in this layout           |
+#### `Section`
+A named seating area (e.g. "Section 101", "Floor GA").
 
-#### Section
+| Field | Type | Description |
+|---|---|---|
+| `id` | UUID | Primary key |
+| `section_id` | String | Human-readable ID (e.g. `A101`) — unique |
+| `label` | String | Display name |
+| `category` | SeatCategory | FIELD / PLATINUM / GOLD / SILVER / BRONZE / GENERAL |
+| `color` | String | Hex fill color |
+| `geometry` | Json | GeoJSON Polygon (section outline) |
+| `centerX/Y` | Float | Centroid for label placement and bbox filtering |
+| `level` | String? | Venue level: 100 / 200 / 300 / SUITE / CLUB |
+| `curveRadius` | Float? | Radius for curved sections |
+| `photoUrl` | String? | Seat-view photo URL |
+| `isAccessible` | Boolean | ADA accessible section |
+| `isObstructed` | Boolean | Obstructed view section |
 
-A named seating area (e.g., "Section 101", "Floor GA").
-
-| Field             | Type          | Description                                         |
-| ----------------- | ------------- | --------------------------------------------------- |
-| id                | String (UUID) | Primary key                                         |
-| layoutId          | String        | FK → Layout                                         |
-| section_id        | String        | Human-readable unique ID (e.g., "101")              |
-| label             | String        | Display label                                       |
-| category          | SeatCategory  | FIELD / PLATINUM / GOLD / SILVER / BRONZE / GENERAL |
-| color             | String        | Hex color for map rendering                         |
-| geometry          | Json          | GeoJSON Polygon defining section boundary           |
-| centerX / centerY | Float         | Center coordinates for price markers                |
-| level             | String?       | Venue level: 100 / 200 / 300 / SUITE / CLUB         |
-| curveRadius       | Float?        | Curve radius for arc sections                       |
-| photoUrl          | String?       | Seat view photo URL                                 |
-| isAccessible      | Boolean       | ADA accessible section                              |
-| isObstructed      | Boolean       | Obstructed view section                             |
-
-#### Seat
-
+#### `Seat`
 An individual seat within a section.
 
-| Field        | Type          | Description                            |
-| ------------ | ------------- | -------------------------------------- |
-| id           | String (UUID) | Primary key                            |
-| seat_id      | String        | Unique ID (e.g., "A101-R1-S1")         |
-| sectionId    | String        | FK → Section                           |
-| row          | String        | Row label (A, B, C…)                   |
-| number       | Int           | Seat number within row                 |
-| x / y        | Float         | Canvas coordinates                     |
-| lng / lat    | Float         | Mapbox coordinates                     |
-| geometry     | Json?         | Optional GeoJSON Point                 |
-| price        | Decimal       | Current price                          |
-| status       | SeatStatus    | AVAILABLE / LOCKED / SOLD / OBSTRUCTED |
-| isAccessible | Boolean       | Wheelchair accessible                  |
-| isCompanion  | Boolean       | Companion seat                         |
-| isObstructed | Boolean       | Obstructed view                        |
-| isVIP        | Boolean       | VIP seat                               |
-| aisleGap     | Boolean       | Aisle seat                             |
+| Field | Type | Description |
+|---|---|---|
+| `id` | UUID | Primary key |
+| `seat_id` | String | Human-readable ID (e.g. `A101-R1-S1`) — unique |
+| `sectionId` | UUID | FK → Section |
+| `row` | String | Row label (e.g. `A`, `B`) |
+| `number` | Int | Seat number within row |
+| `x`, `y` | Float | Canvas coordinates |
+| `lng`, `lat` | Float | Mapbox coordinates |
+| `price` | Decimal | Base price |
+| `status` | SeatStatus | AVAILABLE / LOCKED / SOLD / OBSTRUCTED |
+| `isAccessible` | Boolean | Wheelchair accessible |
+| `isCompanion` | Boolean | Companion seat (next to accessible) |
+| `isObstructed` | Boolean | Obstructed view |
+| `isVIP` | Boolean | VIP seat |
+| `aisleGap` | Boolean | Aisle seat |
 
-#### PricingRule
-
+#### `PricingRule`
 Dynamic pricing configuration per section.
 
-| Field                 | Type    | Description                     |
-| --------------------- | ------- | ------------------------------- |
-| sectionId             | String  | FK → Section (unique)           |
-| base_price            | Decimal | Base price                      |
-| demand_multiplier     | Float   | 1.0–3.0, scales with sold ratio |
-| time_factor           | Float   | Increases near event date       |
-| min_price / max_price | Decimal | Price floor and ceiling         |
+| Field | Type | Description |
+|---|---|---|
+| `sectionId` | UUID | FK → Section |
+| `base_price` | Decimal | Starting price |
+| `min_price` | Decimal | Floor price |
+| `max_price` | Decimal | Ceiling price |
+| `demand_multiplier` | Float | Max multiplier at 100% sold (e.g. 2.0 = 2×) |
+| `time_factor` | Float | Multiplier applied as event approaches |
 
-#### Order
+#### `Order`
+A confirmed purchase.
 
-A completed purchase.
-
-| Field   | Type        | Description                     |
-| ------- | ----------- | ------------------------------- |
-| userId  | String      | Buyer identifier                |
-| seatIds | Json        | Array of seat_id strings        |
-| total   | Decimal     | Total amount charged            |
-| status  | OrderStatus | PENDING / CONFIRMED / CANCELLED |
-
-### Enums
-
-```
-SeatStatus:   AVAILABLE | LOCKED | SOLD | OBSTRUCTED
-SeatCategory: FIELD | PLATINUM | GOLD | SILVER | BRONZE | GENERAL
-OrderStatus:  PENDING | CONFIRMED | CANCELLED
-```
+| Field | Type | Description |
+|---|---|---|
+| `userId` | String | Buyer identifier |
+| `seatIds` | String[] | Array of `seat_id` values |
+| `total` | Float | Total amount charged |
+| `status` | String | CONFIRMED / REFUNDED |
 
 ---
 
-## 6. API Reference
+## 5. Backend API
 
-All Next.js API routes at `/api/*` are thin proxies to the Express backend at `http://localhost:4000`. They include demo-mode fallbacks so the UI works without a running backend.
+Base URL: `http://localhost:4000`
 
-### GET /api/health
+### Seat Actions
 
-Returns server status.
-
-**Response:**
-
-```json
-{ "status": "ok", "timestamp": "2026-05-08T10:00:00.000Z" }
-```
-
-Demo fallback: `{ "status": "ok", "demo": true }`
-
----
-
-### POST /api/lock-seat
-
-Atomically locks a seat for a user using Redis SETNX. Lock TTL is 10 minutes.
+#### `POST /api/lock-seat`
+Atomically locks a seat for a user using Redis `SETNX`. Lock expires in 10 minutes.
 
 **Request body:**
-
 ```json
 { "seat_id": "A101-R1-S1", "user_id": "user_abc" }
 ```
 
 **Response (success):**
-
 ```json
-{ "success": true, "seat_id": "A101-R1-S1", "expires_at": 1715161200000 }
+{ "success": true, "seat_id": "A101-R1-S1", "expires_at": 1716123456789 }
 ```
 
-**Response (already locked):**
-
+**Response (conflict — seat locked by another user):**
 ```json
-{
-  "success": false,
-  "error": "Seat is locked by another user",
-  "expires_at": 1715161200000
-}
+{ "error": "Seat is locked by another user", "locked_by": "user_xyz", "expires_at": 1716123456789 }
 ```
+HTTP 409.
+
+**Side effects:** Emits `seat_locked` WebSocket event to the section room. Schedules a `section_update` batch event.
 
 ---
 
-### POST /api/unlock-seat
-
+#### `POST /api/unlock-seat`
 Releases a seat lock. Only the lock owner can release.
 
 **Request body:**
-
 ```json
 { "seat_id": "A101-R1-S1", "user_id": "user_abc" }
 ```
 
-**Response:**
+**Response:** `{ "success": true, "seat_id": "A101-R1-S1" }`
 
-```json
-{ "success": true }
-```
+HTTP 403 if the caller does not own the lock.
 
 ---
 
-### POST /api/purchase
-
-Marks seats as SOLD in the database and creates an Order record.
+#### `POST /api/purchase`
+Finalises a purchase. Verifies all seats are not already sold, marks them `SOLD` in the DB in a single Prisma transaction, creates an `Order` record, and invalidates Redis caches.
 
 **Request body:**
-
 ```json
-{ "seat_ids": ["A101-R1-S1", "A101-R1-S2"], "user_id": "user_abc" }
+{
+  "seat_ids": ["A101-R1-S1", "A101-R1-S2"],
+  "user_id": "user_abc",
+  "payment_token": "tok_stripe_xxx"
+}
 ```
 
 **Response:**
-
 ```json
-{ "success": true, "order_total": 300, "seat_count": 2 }
+{ "success": true, "order_total": 500, "seat_count": 2 }
 ```
+
+**Side effects:** Emits `bulk_seat_update` WebSocket event. Invalidates pricing and GeoJSON caches for affected sections.
 
 ---
 
-### GET /api/geojson/[layoutId]
+### Seats
 
-Returns a GeoJSON FeatureCollection of all sections in a layout. Cached in Redis for 5 minutes.
+#### `GET /api/seats?section_id=A101`
+Returns all seats for a section with live lock status merged from Redis.
 
 **Response:**
-
 ```json
 {
-  "type": "FeatureCollection",
-  "features": [
+  "section_id": "A101",
+  "seats": [
     {
-      "type": "Feature",
-      "id": "101",
-      "geometry": { "type": "Polygon", "coordinates": [...] },
-      "properties": {
-        "section_id": "101",
-        "label": "Section 101",
-        "category": "GOLD",
-        "color": "#FFD700",
-        "seatCount": 80,
-        "availableCount": 62,
-        "soldCount": 15,
-        "lockedCount": 3,
-        "height": 16,
-        "centerLng": -74.0745,
-        "centerLat": 40.8135
-      }
+      "seat_id": "A101-R1-S1",
+      "row": "A", "number": 1,
+      "x": 120.5, "y": 80.3,
+      "lng": -74.0, "lat": 40.8,
+      "price": 250,
+      "status": "LOCKED",
+      "lockedBy": "user_xyz"
     }
   ]
 }
@@ -440,342 +304,494 @@ Returns a GeoJSON FeatureCollection of all sections in a layout. Cached in Redis
 
 ---
 
-### GET /api/seats/geojson
-
-Returns a GeoJSON FeatureCollection of seats for a section. Cached in Redis for 60 seconds.
-
-**Query params:** `?sectionId=<id>`
+#### `GET /api/seats/geojson?section_id=A101`
+Returns a GeoJSON `FeatureCollection` of seat `Point` features for Mapbox rendering. Cached in Redis.
 
 ---
 
-### POST /api/layout
+### Sections
 
-Saves a layout (sections + seats) to the database.
+#### `GET /api/sections?layoutId=xxx&bbox=west,south,east,north`
+Returns sections for a layout. If `bbox` is provided, only returns sections whose centroid falls within the bounding box (tile-based loading).
+
+**Response:**
+```json
+{
+  "sections": [
+    {
+      "section_id": "A101",
+      "label": "101",
+      "category": "GOLD",
+      "color": "#f59e0b",
+      "geometry": { "type": "Polygon", "coordinates": [...] },
+      "seatCount": 80,
+      "availableCount": 62,
+      "basePrice": 350,
+      "centerX": -74.07, "centerY": 40.81
+    }
+  ]
+}
+```
 
 ---
 
-## 7. Backend Services
-
-### Lock Service (`src/server/services/lockService.ts`)
-
-Manages seat reservations using Redis as the sole source of truth.
-
-| Function                           | Description                                                                             |
-| ---------------------------------- | --------------------------------------------------------------------------------------- |
-| `lockSeat(seatId, userId)`         | Atomic SETNX lock. Re-extends own lock if already held. Returns `LockResult`.           |
-| `unlockSeat(seatId, userId)`       | Deletes lock key. Only the owner can unlock.                                            |
-| `getSeatLockStatus(seatId)`        | Returns `{ locked, userId, expiresAt }`.                                                |
-| `getBulkSeatLockStatus(seatIds[])` | Pipeline-based bulk status check. Returns a `Map`.                                      |
-| `unlockAllByUser(userId)`          | Scans all lock keys and releases all locks held by a user. Called on socket disconnect. |
-
-Redis key format: `seat:lock:<seat_id>` with 10-minute TTL.
+#### `GET /api/geojson/:layoutId`
+Returns a full GeoJSON `FeatureCollection` of all section polygons for a layout. Cached in Redis for 5 minutes. Response includes `Cache-Control: public, max-age=60`.
 
 ---
 
-### Pricing Service (`src/server/services/pricingService.ts`)
+### Layout
 
-Computes real-time prices based on demand and time-to-event.
+#### `POST /api/layout`
+Creates a new layout version for an event. Auto-increments `version`.
 
-**Formula:**
+**Request body:**
+```json
+{
+  "eventId": "uuid",
+  "name": "Main Layout v2",
+  "sections": [{ "section_id": "A101", "label": "101", "geometry": {...} }]
+}
+```
+
+---
+
+#### `GET /api/layout/:id`
+Returns a layout with all sections, pricing rules, and seat counts.
+
+---
+
+#### `PUT /api/layout/:id`
+Updates layout name or `isActive` flag. Invalidates GeoJSON cache.
+
+---
+
+#### `GET /api/layout/:id/versions`
+Returns all version history for the event that owns this layout.
+
+---
+
+#### `POST /api/layout/:id/rollback/:version`
+Deactivates all versions and activates the specified version. Invalidates GeoJSON cache.
+
+---
+
+## 6. WebSocket Events
+
+The Socket.IO server runs on the same port as Express (4000). Clients connect with `auth: { userId }`.
+
+### Rooms
+Clients join section-specific rooms to receive targeted updates:
+```js
+socket.emit('join_section', 'A101');
+socket.emit('leave_section', 'A101');
+```
+
+### Server → Client Events
+
+| Event | Room | Payload | Description |
+|---|---|---|---|
+| `seat_locked` | `section:{id}` | `{ seat_id, user_id, expires_at }` | A seat was just locked |
+| `seat_unlocked` | `section:{id}` | `{ seat_id }` | A seat lock was released |
+| `seat_sold` | `section:{id}` | `{ seat_id, section_id }` | A seat was purchased |
+| `section_update` | `section:{id}` | `{ section_id, available_count, locked_count, price }` | Batched section stats (every 2s) |
+| `bulk_seat_update` | broadcast | `{ seats: [{ seat_id, status }] }` | Multiple seats changed at once |
+| `heartbeat` | broadcast | `{ ts }` | Sent every 30s for connection health |
+
+### Disconnect Behaviour
+When a client disconnects, all their Redis seat locks are automatically released and a `bulk_seat_update` is broadcast to free those seats for other users.
+
+### Client Usage (React)
+```tsx
+const { joinSection, onSeatLocked, onSeatUnlocked } = useSocket();
+
+useEffect(() => {
+  joinSection('A101');
+  const off = onSeatLocked((e) => {
+    // update local seat state
+  });
+  return off; // removes listener
+}, []);
+```
+
+---
+
+## 7. Frontend — Booking Experience
+
+### Pages
+
+- `/` — Home page with `StadiumMap` (Mapbox) or `KonvaStadium` fallback
+- `/booking` — Full booking shell with sidebar cart
+
+### Components
+
+#### `StadiumMap` (`src/components/StadiumMap/StadiumMap.tsx`)
+Mapbox GL JS map with:
+- Extruded 3D section polygons (fill-extrusion layer)
+- WebGL seat point layer (single draw call for 5000+ seats)
+- Floating price marker pins per section
+- Level-of-detail: sections at low zoom, individual seats at high zoom
+- Subscribes to Socket.IO section rooms on section click
+
+#### `BookingSidebar` (`src/components/Sidebar/BookingSidebar.tsx`)
+Cart panel showing selected seats, total price, and checkout button. Calls `POST /api/purchase` on confirm.
+
+#### `KonvaStadium` (`src/components/KonvaBooking/KonvaStadium.tsx`)
+Fallback canvas renderer using Konva.js. Used when Mapbox token is not configured.
+
+### Cart State (`CartContext`)
+Global cart managed with `useReducer`. Actions:
+
+| Action | Description |
+|---|---|
+| `ADD_SEAT` | Adds a seat (deduplicates by `seat_id`) |
+| `REMOVE_SEAT` | Removes a seat and subtracts price |
+| `CLEAR_CART` | Empties cart |
+| `SET_LOCKING` | Tracks in-flight lock requests per seat |
+
+### Socket State (`SocketContext`)
+Wraps Socket.IO client. Provides:
+- `joinSection(id)` / `leaveSection(id)` — room management
+- `onSeatLocked(cb)` / `onSeatUnlocked(cb)` / `onSeatSold(cb)` — event subscriptions (return cleanup function)
+- `onSectionUpdate(cb)` / `onBulkSeatUpdate(cb)` — aggregate updates
+- Heartbeat monitoring: reconnects if 2 consecutive heartbeats are missed (70s window)
+
+---
+
+## 8. Frontend — Admin Builder
+
+Entry point: `/admin` → `VenueBuilder` component.
+
+### Component Tree
 
 ```
-effectivePrice = clamp(
-  basePrice × demandFactor × timeFactor,
-  minPrice,
-  maxPrice
-)
-
-demandFactor = 1 + soldRatio × (demand_multiplier - 1)
-timeFactor   = time_factor × 1.5  (if < 7 days to event)
-             = time_factor × 1.2  (if < 30 days to event)
-             = time_factor        (otherwise)
+VenueBuilder
+├── LeftPanel              — Tool palette + shape presets
+├── BuilderCanvas          — HTML5 Canvas renderer (all drawing)
+├── SectionContextToolbar  — Floating toolbar above selected section
+├── RowManagerPanel        — Right panel: row/seat management
+├── SectionPropertiesPanel — Right panel: section properties editor
+├── AdvancedToolsPanel     — Slide-in: grid generator, templates, CSV import/export, validation
+├── LayerPanel             — Layer visibility/lock controls
+└── GenerateDialogs        — Ring / Arc / Block generation dialogs
 ```
+
+### `useBuilderEngine` (`useBuilderEngine.ts`)
+The single source of truth for all builder state. ~1650 lines. Key responsibilities:
+
+- **Layout state** — `layout: LayoutState` (shapes, rows, seats, texts) with `layoutRef` for hot-path access
+- **Camera** — pan/zoom with `w2s` / `s2w` coordinate transforms
+- **Tool system** — 20+ tools: `select`, `seatselect`, `section`, `rect`, `row`, `multirow`, `arcrow`, `block`, `text`, `pan`, and shape presets
+- **Hit testing** — polygon point-in-test for sections, radius test for seats
+- **Drag system** — move shapes, drag vertices, bbox resize handles, rotation handle, arc row handles
+- **History** — 80-snapshot undo/redo stack
+- **Commit** — all mutations go through `commit(nextLayout, label)` which updates both `layoutRef` (sync) and `setLayout` (React state)
+
+Key exported functions:
+
+| Function | Description |
+|---|---|
+| `updateShape(u, shapeId?)` | Patch a section's fields. Accepts optional `shapeId` to work outside selection context |
+| `updateSeat(u)` | Patch the selected seat |
+| `updateRow(rowId, u)` | Patch a row (label, category, curve, price override, etc.) |
+| `addRow(sectionId)` | Add a new row to a section |
+| `deleteRow(rowId)` | Remove a row and its seats |
+| `fillSection(sectionId)` | Auto-fill a section with a seat grid |
+| `addCurvedRows(sectionId, ...)` | Generate arc-curved rows |
+| `splitSection(sectionId)` | Split a section into two halves |
+| `mergeSections(ids)` | Merge multiple sections into one |
+| `distributeSeats(axis)` | Evenly space selected seats horizontally or vertically |
+| `setSpacing(gap, axis)` | Set exact pixel spacing between selected seats |
+| `rotateSelected(deg)` | Rotate selected shapes/seats |
+| `autoBalance(sectionId)` | Redistribute rows evenly within section bounds |
+| `exportLayout()` | Download layout as GeoJSON |
+| `undo()` / `redo()` | History navigation |
+| `zoomIn/Out/Reset/Fit()` | Camera controls |
+
+### `BuilderCanvas` (`BuilderCanvas.tsx`)
+Pure canvas renderer (~1337 lines). Receives layout + camera as props, redraws on every change. Renders:
+- Section polygons with category-based fill/stroke colours (TickPick style)
+- Section labels (large grey number) + price badge pill
+- Row bands (arc or straight)
+- Individual seat circles with status colours
+- Selection highlight (blue glow)
+- Draw preview (ghost polygon/line while drawing)
+- Bbox resize handles and rotation handle for selected shapes
+- Arc row endpoint handles
+
+Coordinate helpers exported for use in other components:
+```ts
+w2s(wx, wy, camera, W, H) → [screenX, screenY]  // world → screen
+s2w(sx, sy, camera, W, H) → [worldX, worldY]     // screen → world
+```
+
+### `SectionPropertiesPanel` (`SectionPropertiesPanel.tsx`)
+Fully controlled component — all values read from `shape` prop, all changes call `onUpdate`. Fields:
+
+| Field | Stored on `BShape` | Description |
+|---|---|---|
+| Label | `label` | Section display name |
+| Category | `category` | VIP / PREMIUM / STANDARD / BUDGET / GA |
+| Scale | `scale` | Visual scale factor (0.1–3.0) |
+| Label visible | `labelVisible` | Show/hide canvas label |
+| Font size | `labelFontSize` | Label font size in pt |
+| Rotation | `rotation` | Rotation in degrees |
+| Position X/Y | `cx`, `cy` + `vertices` | Moves centroid AND all vertices |
+| Capacity | `capacity` | Max capacity (informational) |
+| Seating layout | `seatingLayout` | circular / rectangular |
+| Notes | `notes` | Free-text notes |
+| Level | `level` | 100 / 200 / 300 / SUITE / CLUB |
+| Accessible | `isAccessible` | ADA flag |
+| Obstructed | `isObstructed` | Obstructed view flag |
+
+### `AdvancedToolsPanel` (`AdvancedToolsPanel.tsx`)
+Slide-in panel with four tabs:
+
+- **Tools** — Section split/merge, rotation, aisle insertion, density controls, auto-balance
+- **Grid** — Seat grid generator: rows × seats, curve radius, aisle placement, numbering scheme
+- **I/O** — CSV import (10,000+ seats), GeoJSON export, venue clone
+- **Validate** — Overlap detection, spacing validation (8-unit minimum), duplicate ID check, ADA warnings (1% requirement), pricing variance alerts
+
+### `RowManagerPanel` (`RowManagerPanel.tsx`)
+Manages rows within the selected section:
+- Add / delete / duplicate rows
+- Edit row label, category, price override, curve radius
+- Split a row at a selected seat
+- Clear / restore row seats
+- Add curved rows with configurable parameters
+- Per-seat strip view with status indicators
+
+### Type Definitions (`builderTypes2.ts`)
+
+```ts
+interface BShape {
+  id, type, label, category, color
+  vertices: [number, number][]
+  cx, cy                          // centroid
+  level?, curveRadius?, photoUrl?
+  isAccessible?, isObstructed?
+  displayMode?                    // 'rows' | 'seats' | 'both'
+  // Properties panel fields:
+  notes?, capacity?, seatingLayout?
+  labelVisible?, labelFontSize?
+  rotation?, scale?
+}
+
+interface BRow {
+  id, sectionId, label, category
+  seats: BSeat[]
+  curveRadius?, curveCenter?, curveA0?, curveA1?
+  priceOverride?
+}
+
+interface BSeat {
+  id, rowId, sectionId
+  number, label, x, y, price
+  status: 'available' | 'sold' | 'locked' | 'obstructed'
+  category, color?
+  isAccessible?, isCompanion?, isObstructed?, isVIP?, aisleGap?
+}
+
+interface LayoutState {
+  shapes: BShape[]
+  rows: BRow[]
+  seats: BSeat[]
+  texts: BText[]
+}
+```
+
+---
+
+## 9. Services
+
+### Lock Service (`lockService.ts`)
+
+Uses Redis `SETNX` for atomic lock acquisition. Lock value is `{ userId, expiresAt }` JSON.
+
+```
+Key pattern:  seat:lock:{seat_id}
+TTL:          600 seconds (10 minutes)
+```
+
+- **Re-lock own seat** — If the same user tries to lock a seat they already hold, the TTL is extended.
+- **Bulk status** — Uses Redis pipeline to check N seats in a single round-trip.
+- **Disconnect cleanup** — `unlockAllByUser(userId)` scans `seat:lock:*` keys and deletes all owned by the user.
+
+### Pricing Service (`pricingService.ts`)
+
+Computes dynamic price from three factors:
+
+```
+effectivePrice = basePrice × demandFactor × timeFactor
+```
+
+- **demandFactor** — scales from 1.0 (0% sold) to `demand_multiplier` (100% sold)
+- **timeFactor** — `rule.time_factor × 1.5` in last 7 days, `× 1.2` in last 30 days, `× 1.0` otherwise
+- Result is clamped to `[min_price, max_price]`
+- Cached in Redis for 30 seconds per section
 
 **Demand levels:**
 
-- `LOW` — < 30% sold
-- `MEDIUM` — 30–60% sold
-- `HIGH` — 60–85% sold
-- `SURGE` — > 85% sold
+| Sold ratio | Level |
+|---|---|
+| < 30% | LOW |
+| 30–60% | MEDIUM |
+| 60–85% | HIGH |
+| > 85% | SURGE |
 
-**Badges:** `Amazing Deal` (≤80% of base), `Great Value` (≤105% of base)
+**Price badges:**
+- `Amazing Deal` — effective price ≤ 80% of base
+- `Great Value` — effective price ≤ 105% of base
 
-Results are cached in Redis for 30 seconds per section.
+### GeoJSON Service (`geojsonService.ts`)
 
----
-
-### GeoJSON Service (`src/server/services/geojsonService.ts`)
-
-Derives GeoJSON from normalized DB data. Never stores GeoJSON blobs.
-
-| Function                                | Cache TTL  | Description                               |
-| --------------------------------------- | ---------- | ----------------------------------------- |
-| `deriveLayoutGeoJSON(layoutId)`         | 5 minutes  | Full FeatureCollection for all sections   |
-| `deriveSeatGeoJSON(sectionId)`          | 60 seconds | Point features for all seats in a section |
-| `invalidateGeoJSONCache(layoutId)`      | —          | Clears layout cache on update             |
-| `invalidateSeatGeoJSONCache(sectionId)` | —          | Clears seat cache on update               |
-
-Section heights for 3D extrusion: FIELD=25, PLATINUM=20, GOLD=16, SILVER=12, BRONZE=8, GENERAL=5.
+- `deriveLayoutGeoJSON(layoutId)` — builds a `FeatureCollection` from all sections in a layout. Cached in Redis for 5 minutes.
+- `deriveSeatGeoJSON(sectionId)` — builds a `FeatureCollection` of seat `Point` features. Cached in Redis.
+- `invalidateGeoJSONCache(layoutId)` / `invalidateSeatGeoJSONCache(sectionId)` — called after mutations.
 
 ---
 
-## 8. Frontend Components
+## 10. State Management
 
-### StadiumMap (`src/components/StadiumMap/StadiumMap.tsx`)
+### Builder State
+All builder state lives in `useBuilderEngine`. No external state library. Uses:
+- `useRef` for hot-path data (camera, layout, selection, tool) — avoids re-renders during pointer events
+- `useState` for UI-reactive data (layout copy, selectedIds, camera copy, preview) — triggers canvas redraws
+- `useCallback` with explicit deps for all mutations
 
-The main booking map using Mapbox GL JS.
+### Cart State
+`CartContext` uses `useReducer`. Persists only in memory (no localStorage). Cart is cleared on page reload.
 
-- Renders sections as extruded 3D polygons (height based on category).
-- Adds a WebGL seat layer for individual seat dots (single draw call for 5000+ seats).
-- Shows floating price markers at section centers.
-- Falls back to mock geometry if no backend is available.
-- Listens to Socket.IO events to update seat colors in real time.
-
-Key functions:
-
-- `addSectionLayers()` — adds fill-extrusion layer for sections
-- `addSeatLayer()` — adds circle layer for individual seats
-- `updatePriceMarkers()` — updates floating price pins
-- `loadFallbackGeometry()` — loads mock GeoJSON for demo mode
+### Socket State
+`SocketContext` manages a single Socket.IO connection per session. Event subscriptions return cleanup functions for use in `useEffect`.
 
 ---
 
-### KonvaStadium (`src/components/KonvaBooking/KonvaStadium.tsx`)
+## 11. Data Flow
 
-A 2D Konva canvas rendering of the stadium for the `/booking` route.
+### Seat Selection (Booking)
 
-- Draws sections as arc polygons.
-- Renders individual seats as colored circles.
-- Handles seat selection, hover tooltips, and zoom/pan.
-- Integrates with CartContext for seat selection state.
-
----
-
-### BookingSidebar (`src/components/Sidebar/BookingSidebar.tsx`)
-
-Right-side panel showing:
-
-- Selected seats list with prices
-- Cart total
-- Checkout button (calls `/api/purchase`)
-- Lock status indicators
-
----
-
-### CartContext (`src/context/CartContext.tsx`)
-
-Global cart state using `useReducer`. Actions: `ADD_SEAT`, `REMOVE_SEAT`, `CLEAR_CART`.
-
----
-
-### SocketContext (`src/context/SocketContext.tsx`)
-
-Manages the Socket.IO client connection. Provides `useSocket()` hook. Handles:
-
-- Connection with `userId` auth
-- Auto-reconnect
-- Joining/leaving section rooms
-
----
-
-### ThreeViewer (`src/components/ThreeViewer/ThreeViewer.tsx`)
-
-Three.js 3D venue viewer for previewing layouts. Renders sections as extruded meshes with label sprites.
-
----
-
-## 9. Real-Time System
-
-The WebSocket server uses Socket.IO with room-based subscriptions.
-
-### Rooms
-
-- `section:<sectionId>` — clients join when viewing a section
-
-### Events (server → client)
-
-| Event              | Payload                                                | Description                              |
-| ------------------ | ------------------------------------------------------ | ---------------------------------------- |
-| `seat_locked`      | `{ seat_id, user_id, expires_at }`                     | A seat was just locked                   |
-| `seat_unlocked`    | `{ seat_id }`                                          | A seat lock was released                 |
-| `seat_sold`        | `{ seat_id, section_id }`                              | A seat was purchased                     |
-| `section_update`   | `{ section_id, available_count, locked_count, price }` | Batched section stats (every 2s)         |
-| `bulk_seat_update` | `{ seats: [{ seat_id, status }] }`                     | Bulk status change (e.g., on disconnect) |
-| `heartbeat`        | `{ ts }`                                               | Keep-alive ping every 30s                |
-
-### Events (client → server)
-
-| Event           | Payload     | Description                      |
-| --------------- | ----------- | -------------------------------- |
-| `join_section`  | `sectionId` | Subscribe to section updates     |
-| `leave_section` | `sectionId` | Unsubscribe from section updates |
-
-### Disconnect Handling
-
-On client disconnect, `unlockAllByUser(userId)` is called to release all locks held by that user. A `bulk_seat_update` is broadcast to all clients marking those seats as `AVAILABLE`.
-
----
-
-## 10. Admin Builder
-
-The admin builder at `/admin` is a full venue layout editor.
-
-### Main Components
-
-**VenueBuilder** (`VenueBuilder.tsx`) — Top-level orchestrator. Manages layout state, section/seat selection, and coordinates all sub-panels.
-
-**BuilderCanvas** (`BuilderCanvas.tsx`) — The main canvas (HTML Canvas 2D). Handles:
-
-- Rendering sections, seats, selection handles
-- Mouse events: pan, zoom, drag, select, draw
-- World ↔ screen coordinate transforms (`s2w`, `w2s`)
-- Snap-to-grid
-
-**useBuilderEngine** (`useBuilderEngine.ts`) — Core state hook (~816 lines). Manages:
-
-- Section and seat CRUD
-- Undo/redo history
-- Selection state
-- Convex hull computation
-- Snap logic
-
-**AdvancedToolsPanel** (`AdvancedToolsPanel.tsx`) — Four tabs:
-
-| Tab       | Features                                                                             |
-| --------- | ------------------------------------------------------------------------------------ |
-| Grid      | Generate seat grids: rows × seats, curve radius, aisle placement, numbering schemes  |
-| Templates | 5 section shapes: Rectangle, Trapezoid, Arc, Corner, Suite Box                       |
-| I/O       | CSV import (10,000+ seats), GeoJSON export, venue clone                              |
-| Validate  | Overlap detection, spacing validation, duplicate IDs, ADA warnings, pricing variance |
-
-**advancedTools.ts** — Core algorithms:
-
-| Function                       | Description                                                  |
-| ------------------------------ | ------------------------------------------------------------ |
-| `generateSeatGrid(config)`     | Generates a grid of seats with optional curve and aisle gaps |
-| `applyTemplate(type, section)` | Applies a shape template to a section                        |
-| `validateLayout(sections)`     | Runs all validation checks, returns warnings array           |
-| `polygonsOverlap(a, b)`        | SAT-based polygon overlap detection                          |
-| `importFromCSV(text)`          | Parses CSV into seat objects                                 |
-| `exportToGeoJSON(sections)`    | Serializes layout to GeoJSON                                 |
-| `exportToCSV(sections)`        | Serializes seats to CSV                                      |
-
-### CSV Import Format
-
-```csv
-section_id,row,seat,x,y,price,category
-101,A,1,120.5,80.3,250,PREMIUM
-101,A,2,128.5,80.3,250,PREMIUM
+```
+User clicks seat on map
+  → StadiumMap onClick
+  → POST /api/lock-seat  (Redis SETNX)
+  → Server emits seat_locked to section room
+  → Other clients receive seat_locked → mark seat grey
+  → CartContext.addSeat()
+  → BookingSidebar shows seat in cart
 ```
 
-### Validation Rules
+### Purchase
 
-- Overlap detection between sections (polygon intersection)
-- Minimum seat spacing: 8 units
-- Duplicate seat ID check
-- ADA requirement: ≥1% of seats must be accessible
-- Pricing variance alert: sections with >3× price difference
+```
+User clicks "Buy Now"
+  → POST /api/purchase
+  → Prisma transaction: seats → SOLD, Order created
+  → Redis: pricing + GeoJSON caches invalidated
+  → Server emits bulk_seat_update (broadcast)
+  → All clients update seat colours to sold
+```
 
-### Performance Benchmarks
+### Admin Save
 
-| Operation            | Scale        | Time |
-| -------------------- | ------------ | ---- |
-| Seat grid generation | 500 seats    | < 1s |
-| CSV import           | 10,000 seats | ~2s  |
-| Validation           | 20,000 seats | ~3s  |
-| GeoJSON export       | 20,000 seats | ~1s  |
+```
+User clicks Export in VenueBuilder
+  → exportLayout() in useBuilderEngine
+  → Downloads GeoJSON file
+  → (Optional) POST /api/layout to persist to DB
+```
+
+### Real-time Section Stats
+
+```
+Any seat action (lock/unlock/purchase)
+  → scheduleSectionUpdate(sectionId)
+  → Batched every 2s
+  → section_update emitted to section:{id} room
+  → Clients in that room update available count + price display
+```
 
 ---
 
-## 11. Environment & Configuration
+## 12. Environment Variables
 
-### `.env.local` (frontend + backend)
+Create `.env.local` in the project root:
 
 ```env
-NEXT_PUBLIC_MAPBOX_TOKEN=pk.your_mapbox_token_here
+# Mapbox (required for 3D map; fallback to Konva if missing)
+NEXT_PUBLIC_MAPBOX_TOKEN=pk.your_token_here
+
+# Database
 DATABASE_URL="postgresql://ticketing:ticketing123@localhost:5432/ticketing"
+
+# Redis
 REDIS_URL="redis://localhost:6379"
-BACKEND_URL=http://localhost:4000
+
+# Socket.IO server URL (consumed by frontend)
+NEXT_PUBLIC_SOCKET_URL=http://localhost:4000
+
+# App URL (consumed by backend CORS)
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Backend port (default: 4000)
 BACKEND_PORT=4000
-```
-
-### `next.config.js`
-
-- Sets CORS headers for API routes
-- Allows cross-origin requests from the Express backend
-
-### `tsconfig.json` vs `tsconfig.server.json`
-
-- `tsconfig.json` — Next.js frontend (targets ES2017, includes `src/`)
-- `tsconfig.server.json` — Express backend (CommonJS output, targets `src/server/`)
-
-### Docker Compose Services
-
-| Service  | Image              | Port | Purpose                                 |
-| -------- | ------------------ | ---- | --------------------------------------- |
-| postgres | postgres:15-alpine | 5432 | Primary database                        |
-| redis    | redis:7-alpine     | 6379 | Locks + cache (keyspace events enabled) |
-
----
-
-## 12. Setup & Running
-
-### Quick Start (Demo Mode — no Docker needed)
-
-```bash
-npm install
-npm run dev
-```
-
-- Booking UI: http://localhost:3000
-- Admin Builder: http://localhost:3000/admin
-
-The app runs in demo mode with mock data and fallback API responses when the backend is unavailable.
-
-### Full Stack Setup
-
-**1. Start infrastructure:**
-
-```bash
-npm run db:up          # Starts PostgreSQL + Redis via Docker
-```
-
-**2. Initialize database:**
-
-```bash
-npm run db:generate    # Generate Prisma client
-npm run db:migrate     # Apply schema migrations
-npm run db:seed        # Seed MetLife Stadium (34 sections, 2500+ seats)
-```
-
-**3. Run full stack:**
-
-```bash
-npm run dev            # Starts Next.js (3000) + Express (4000) concurrently
-```
-
-### Production Build
-
-```bash
-npm run build          # Generates Prisma client + Next.js build
-npm run start          # Starts Next.js production server
 ```
 
 ---
 
 ## 13. Scripts & Commands
 
-| Command                                | Description                                           |
-| -------------------------------------- | ----------------------------------------------------- |
-| `npm run dev`                          | Start Next.js + Express concurrently (development)    |
-| `npm run dev:frontend`                 | Start Next.js only                                    |
-| `npm run dev:backend`                  | Start Express + Socket.IO only (with nodemon)         |
-| `npm run build`                        | Generate Prisma client + build Next.js                |
-| `npm run start`                        | Start Next.js production server                       |
-| `npm run lint`                         | Run ESLint                                            |
-| `npm run db:up`                        | Start PostgreSQL + Redis via Docker Compose           |
-| `npm run db:generate`                  | Generate Prisma client from schema                    |
-| `npm run db:migrate`                   | Run Prisma migrations                                 |
-| `npm run db:seed`                      | Seed database with MetLife Stadium data               |
-| `scripts/migrate-advanced-features.sh` | Shell script for applying advanced metadata migration |
+```bash
+# Install dependencies
+npm install
+
+# Development (Next.js + Express concurrently)
+npm run dev
+
+# Frontend only
+npm run dev:frontend
+
+# Backend only
+npm run dev:backend
+
+# Start PostgreSQL + Redis via Docker
+npm run db:up
+
+# Generate Prisma client
+npm run db:generate
+
+# Apply DB migrations
+npm run db:migrate
+
+# Seed MetLife Stadium data
+npm run db:seed
+
+# Type check
+npx tsc --noEmit
+
+# Build for production
+npm run build
+```
+
+### Docker (Infrastructure only)
+The `npm run db:up` command starts PostgreSQL and Redis via Docker Compose. The Next.js and Express servers run directly on the host with `npm run dev`.
+
+```yaml
+# docker-compose.yml (inferred)
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: ticketing
+      POSTGRES_PASSWORD: ticketing123
+      POSTGRES_DB: ticketing
+    ports: ["5432:5432"]
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+```
+
+---
+
+*Last updated: May 2026*

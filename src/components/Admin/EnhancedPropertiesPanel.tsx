@@ -2,7 +2,7 @@
  * Unified Properties Panel — Section / Row / Seat editing with 360° photo viewer
  */
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { BShape, BSeat, BRow, Category, VenueLevel, SeatStatus } from './builderTypes2';
 import { CAT_COLOR, CATS } from './builderTypes2';
 
@@ -119,6 +119,33 @@ export default function EnhancedPropertiesPanel({ selectedEntity, onUpdate, onUp
   const [photoUploading, setPhotoUploading] = useState(false);
   const [show360, setShow360] = useState(false);
 
+  // ── Local input state to prevent re-render lag ──────────────────────────
+  const entityId = (selectedEntity as any)?.id;
+  const [localLabel, setLocalLabel]           = useState((selectedEntity as any)?.label ?? '');
+  const [localBasePrice, setLocalBasePrice]   = useState((selectedEntity as any)?.basePrice ?? '');
+  const [localPriceOverride, setLocalPriceOverride] = useState((selectedEntity as any)?.priceOverride ?? '');
+  const [localSeatRow, setLocalSeatRow]       = useState('');
+  const [localSeatNum, setLocalSeatNum]       = useState(0);
+  const [localSeatPrice, setLocalSeatPrice]   = useState(0);
+  const [localSeatX, setLocalSeatX]           = useState(0);
+  const [localSeatY, setLocalSeatY]           = useState(0);
+
+  useEffect(() => {
+    if (!selectedEntity) return;
+    setLocalLabel((selectedEntity as any).label ?? '');
+    setLocalBasePrice((selectedEntity as any).basePrice ?? '');
+    setLocalPriceOverride((selectedEntity as any).priceOverride ?? '');
+    const isSeatEntity = 'x' in selectedEntity && 'y' in selectedEntity && !('seats' in selectedEntity);
+    if (isSeatEntity) {
+      const s = selectedEntity as BSeat;
+      setLocalSeatRow(s.label.replace(/\d+$/, ''));
+      setLocalSeatNum(s.number);
+      setLocalSeatPrice(s.price);
+      setLocalSeatX(+s.x.toFixed(1));
+      setLocalSeatY(+s.y.toFixed(1));
+    }
+  }, [entityId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!selectedEntity) {
     return (
       <div style={{ padding: 24, textAlign: 'center', color: '#94a3b8', fontSize: 12 }}>
@@ -175,14 +202,19 @@ export default function EnhancedPropertiesPanel({ selectedEntity, onUpdate, onUp
       {/* ── Label ── */}
       <div style={FIELD}>
         <label style={LBL}>Label</label>
-        <input style={INP} value={selectedEntity.label} onChange={e => onUpdate({ label: e.target.value })} />
+        <input style={INP} value={localLabel}
+          onChange={e => setLocalLabel(e.target.value)}
+          onBlur={() => onUpdate({ label: localLabel })}
+          onKeyDown={e => e.key === 'Enter' && onUpdate({ label: localLabel })} />
       </div>
 
-      {/* ── Category ── */}
-      <div style={FIELD}>
-        <label style={LBL}>Category</label>
-        <CatPills value={(selectedEntity as any).category} onChange={c => onUpdate({ category: c })} />
-      </div>
+      {/* ── Category (Section + Row only) ── */}
+      {(isShape || isRow) && (
+        <div style={FIELD}>
+          <label style={LBL}>Category</label>
+          <CatPills value={(selectedEntity as any).category} onChange={c => onUpdate({ category: c })} />
+        </div>
+      )}
 
       {/* ══════════ SECTION ══════════ */}
       {isShape && (
@@ -212,7 +244,10 @@ export default function EnhancedPropertiesPanel({ selectedEntity, onUpdate, onUp
           <div style={FIELD}>
             <label style={LBL}>Base Price ($)</label>
             <input style={INP} type="number" min={0} placeholder="e.g. 150"
-              onChange={e => onUpdate({ basePrice: +e.target.value })} />
+              value={localBasePrice}
+              onChange={e => setLocalBasePrice(e.target.value)}
+              onBlur={() => onUpdate({ basePrice: +localBasePrice || undefined })}
+              onKeyDown={e => e.key === 'Enter' && onUpdate({ basePrice: +localBasePrice || undefined })} />
           </div>
 
           <div style={FIELD}>
@@ -253,9 +288,11 @@ export default function EnhancedPropertiesPanel({ selectedEntity, onUpdate, onUp
             <div style={FIELD}>
               <label style={LBL}>Price Override ($)</label>
               <input style={INP} type="number" min={0}
-                value={row.priceOverride || ''}
+                value={localPriceOverride}
                 placeholder="Leave empty → use section price"
-                onChange={e => onUpdate({ priceOverride: +e.target.value || undefined })} />
+                onChange={e => setLocalPriceOverride(e.target.value)}
+                onBlur={() => onUpdate({ priceOverride: +localPriceOverride || undefined })}
+                onKeyDown={e => e.key === 'Enter' && onUpdate({ priceOverride: +localPriceOverride || undefined })} />
             </div>
 
             <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', marginBottom: 12, fontSize: 11, color: 'var(--text-2)' }}>
@@ -283,20 +320,26 @@ export default function EnhancedPropertiesPanel({ selectedEntity, onUpdate, onUp
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
               <div>
                 <label style={LBL}>Row</label>
-                <input style={INP} value={seat.label.replace(/\d+$/, '')}
-                  onChange={e => onUpdate({ label: e.target.value + seat.number })} />
+                <input style={INP} value={localSeatRow}
+                  onChange={e => setLocalSeatRow(e.target.value)}
+                  onBlur={() => onUpdate({ label: localSeatRow + localSeatNum })}
+                  onKeyDown={e => e.key === 'Enter' && onUpdate({ label: localSeatRow + localSeatNum })} />
               </div>
               <div>
                 <label style={LBL}>Number</label>
-                <input style={INP} type="number" value={seat.number}
-                  onChange={e => onUpdate({ number: +e.target.value })} />
+                <input style={INP} type="number" value={localSeatNum}
+                  onChange={e => setLocalSeatNum(+e.target.value)}
+                  onBlur={() => onUpdate({ number: localSeatNum })}
+                  onKeyDown={e => e.key === 'Enter' && onUpdate({ number: localSeatNum })} />
               </div>
             </div>
 
             <div style={FIELD}>
               <label style={LBL}>Price ($)</label>
-              <input style={INP} type="number" min={0} value={seat.price}
-                onChange={e => onUpdate({ price: +e.target.value })} />
+              <input style={INP} type="number" min={0} value={localSeatPrice}
+                onChange={e => setLocalSeatPrice(+e.target.value)}
+                onBlur={() => onUpdate({ price: localSeatPrice })}
+                onKeyDown={e => e.key === 'Enter' && onUpdate({ price: localSeatPrice })} />
             </div>
 
             <div style={FIELD}>
@@ -320,8 +363,14 @@ export default function EnhancedPropertiesPanel({ selectedEntity, onUpdate, onUp
             <div style={FIELD}>
               <label style={LBL}>Position</label>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <input style={INP} type="number" value={seat.x.toFixed(1)} placeholder="X" onChange={e => onUpdate({ x: +e.target.value })} />
-                <input style={INP} type="number" value={seat.y.toFixed(1)} placeholder="Y" onChange={e => onUpdate({ y: +e.target.value })} />
+                <input style={INP} type="number" value={localSeatX} placeholder="X"
+                  onChange={e => setLocalSeatX(+e.target.value)}
+                  onBlur={() => onUpdate({ x: localSeatX })}
+                  onKeyDown={e => e.key === 'Enter' && onUpdate({ x: localSeatX })} />
+                <input style={INP} type="number" value={localSeatY} placeholder="Y"
+                  onChange={e => setLocalSeatY(+e.target.value)}
+                  onBlur={() => onUpdate({ y: localSeatY })}
+                  onKeyDown={e => e.key === 'Enter' && onUpdate({ y: localSeatY })} />
               </div>
             </div>
 

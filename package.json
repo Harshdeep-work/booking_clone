@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
-    "dev:frontend": "next dev",
+    "dev:frontend": "next dev -p 3002",
     "dev:backend": "nodemon --watch src/server --exec \"ts-node --project tsconfig.server.json src/server/index.ts\"",
     "build": "prisma generate && next build",
     "start": "next start",
@@ -38,6 +38,8 @@
     "framer-motion": "^12.38.0",
     "ioredis": "^5.10.1",
     "konva": "^10.2.5",
+    "lightningcss": "^1.32.0",
+    "lightningcss-linux-x64-gnu": "^1.32.0",
     "lucide-react": "^1.8.0",
     "mapbox-gl": "^3.22.0",
     "next": "16.2.4",

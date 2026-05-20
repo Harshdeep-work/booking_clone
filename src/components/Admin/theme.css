@@ -2,11 +2,11 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 :root {
-  --bg:          #F5F5F3;
+  --bg:          #F0F0EE;
   --panel:       #FFFFFF;
   --panel-hover: #FAFAF8;
-  --border:      #E8E8E6;
-  --border-soft: #F0F0EE;
+  --border:      #E2E2E0;
+  --border-soft: #EBEBEA;
   --text-1:      #1C1C1C;
   --text-2:      #777777;
   --text-3:      #AAAAAA;
@@ -14,33 +14,41 @@
   --accent-soft: #F5EBE0;
   --blue:        #7AA7FF;
   --blue-soft:   #EBF1FF;
-  --radius-sm:   10px;
-  --radius-md:   16px;
-  --radius-lg:   22px;
-  --radius-xl:   28px;
-  --shadow-sm:   0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-md:   0 4px 16px rgba(0,0,0,0.07), 0 1px 4px rgba(0,0,0,0.04);
-  --shadow-lg:   0 12px 40px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.05);
-  --shadow-float:0 20px 60px rgba(0,0,0,0.12), 0 4px 16px rgba(0,0,0,0.06);
+  --radius-sm:   8px;
+  --radius-md:   12px;
+  --radius-lg:   18px;
+  --radius-xl:   24px;
+  --shadow-sm:   0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.05);
+  --shadow-md:   0 4px 16px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.06);
+  --shadow-lg:   0 12px 40px rgba(0,0,0,0.13), 0 2px 8px rgba(0,0,0,0.07);
+  --shadow-float:0 20px 60px rgba(0,0,0,0.16), 0 4px 16px rgba(0,0,0,0.08);
+  /* canvas grid */
+  --canvas-bg:   #F8F8F6;
+  --grid-dot:    rgba(0,0,0,0.10);
+  --topbar-h:    40px;
+  --sidebar-w:   200px;
+  --right-w:     256px;
 }
 
 [data-theme="dark"] {
-  --bg:          #141414;
-  --panel:       #1E1E1E;
-  --panel-hover: #252525;
-  --border:      #2A2A2A;
-  --border-soft: #222222;
-  --text-1:      #F0F0EE;
+  --bg:          #111111;
+  --panel:       #1A1A1A;
+  --panel-hover: #222222;
+  --border:      #2C2C2C;
+  --border-soft: #202020;
+  --text-1:      #EFEFED;
   --text-2:      #888888;
-  --text-3:      #555555;
+  --text-3:      #4A4A4A;
   --accent:      #D4894A;
   --accent-soft: #2A1F14;
   --blue:        #7AA7FF;
   --blue-soft:   #141C2E;
-  --shadow-sm:   0 1px 3px rgba(0,0,0,0.3);
-  --shadow-md:   0 4px 16px rgba(0,0,0,0.4);
-  --shadow-lg:   0 12px 40px rgba(0,0,0,0.5);
-  --shadow-float:0 20px 60px rgba(0,0,0,0.6);
+  --shadow-sm:   0 1px 3px rgba(0,0,0,0.4);
+  --shadow-md:   0 4px 16px rgba(0,0,0,0.5);
+  --shadow-lg:   0 12px 40px rgba(0,0,0,0.6);
+  --shadow-float:0 20px 60px rgba(0,0,0,0.7);
+  --canvas-bg:   #161616;
+  --grid-dot:    rgba(255,255,255,0.06);
 }
 
 /* ── Base ─────────────────────────────────────────────────────────────────── */
@@ -58,15 +66,15 @@
 
 /* ── Top Bar ──────────────────────────────────────────────────────────────── */
 .tf-topbar {
-  height: 56px;
-  background: rgba(255,255,255,0.85);
+  height: 40px;
+  background: rgba(255,255,255,0.92);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  padding: 0 12px;
   flex-shrink: 0;
   z-index: 50;
   box-shadow: var(--shadow-sm);
@@ -248,19 +256,38 @@
 /* ── Body ─────────────────────────────────────────────────────────────────── */
 .tf-body {
   flex: 1;
-  display: flex;
+  position: relative;
   overflow: hidden;
+  display: flex;
+  isolation: isolate;
+}
+
+/* ── Canvas Area ──────────────────────────────────────────────────────────── */
+.tf-canvas-wrap {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--canvas-bg);
+  z-index: 0;
 }
 
 /* ── Left Sidebar ─────────────────────────────────────────────────────────── */
 .tf-sidebar {
-  width: 220px;
-  background: var(--panel);
+  position: relative;
+  width: 180px;
+  background: rgba(255,255,255,0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
   overflow: hidden;
+  z-index: 10;
+  box-shadow: 2px 0 12px rgba(0,0,0,0.06);
+}
+[data-theme="dark"] .tf-sidebar {
+  background: rgba(26,26,26,0.94);
 }
 
 .tf-sidebar-section {
@@ -352,17 +379,6 @@
 .tf-search-wrap { position: relative; }
 .tf-search-wrap svg { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--text-3); width: 13px; height: 13px; }
 
-/* ── Canvas Area ──────────────────────────────────────────────────────────── */
-.tf-canvas-wrap {
-  flex: 1;
-  position: relative;
-  overflow: hidden;
-  background: var(--bg);
-  background-image:
-    radial-gradient(circle, var(--border) 1px, transparent 1px);
-  background-size: 24px 24px;
-}
-
 /* Section mode banner */
 .tf-section-banner {
   position: absolute;
@@ -436,13 +452,21 @@
 
 /* ── Right Panel ──────────────────────────────────────────────────────────── */
 .tf-right-panel {
-  width: 280px;
-  background: var(--panel);
+  position: relative;
+  width: 240px;
+  background: rgba(255,255,255,0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
   overflow: hidden;
+  z-index: 10;
+  box-shadow: -2px 0 12px rgba(0,0,0,0.06);
+}
+[data-theme="dark"] .tf-right-panel {
+  background: rgba(26,26,26,0.94);
 }
 
 .tf-panel-tabs {

@@ -8,7 +8,7 @@
  */
 
 import type { BShape, BSeat, BRow, Category, NumberScheme, LayoutState, ValidationResult, ValidationError, ValidationWarning, ImportFormat, ExportFormat, SeatStatus } from './builderTypes2';
-import { CAT_COLOR, centroid, generateBlockSeats, generateRowSeats, generateArcRowSeats } from './builderTypes2';
+import { CAT_COLOR, centroid, generateBlockSeats, generateRowSeats, generateArcRowSeats, pointInPoly } from './builderTypes2';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SEAT GRID GENERATOR
@@ -560,4 +560,143 @@ export function importFromGeoJSON(geojson: any): { shapes: BShape[]; seats: BSea
   });
   
   return { shapes, seats };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ARC SECTION SEAT FILL
+// Detects arc geometry from a section's vertices and fills with curved rows
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Detect arc parameters from an arcPoly-generated section shape */
+/** Detect arc parameters from an arcPoly-generated section shape.
+ * arcPoly(cx,cy,innerR,outerR,a0,a1,segs=48) produces:
+ *   indices 0..segs     = outer arc (a0→a1) at outerR  [segs+1 pts]
+ *   indices segs+1..2*segs+1 = inner arc (a1→a0) at innerR [segs+1 pts]
+ * Total = 2*(segs+1) pts
+ */
+function detectArcParams(vertices: [number, number][]): { cx: number; cy: number; innerR: number; outerR: number; a0: number; a1: number } | null {
+  const n = vertices.length;
+  if (n < 6 || n % 2 !== 0) return null;
+  const segs = n / 2 - 1; // recover segs from vertex count
+
+  // Outer arc: indices 0..segs
+  const outerPts = vertices.slice(0, segs + 1);
+  // Inner arc: indices segs+1..2*segs+1, drawn a1→a0
+  const innerPts = vertices.slice(segs + 1);
+
+  // Circumcenter of 3 points — exact for perfect arcs
+  const circumcenter = (p1: [number,number], p2: [number,number], p3: [number,number]): [number,number] => {
+    const [ax,ay] = p1, [bx,by] = p2, [cx2,cy2] = p3;
+    const D = 2*(ax*(by-cy2)+bx*(cy2-ay)+cx2*(ay-by));
+    if (Math.abs(D) < 1e-6) return [(ax+bx+cx2)/3,(ay+by+cy2)/3];
+    const m1 = ax*ax+ay*ay, m2 = bx*bx+by*by, m3 = cx2*cx2+cy2*cy2;
+    return [(m1*(by-cy2)+m2*(cy2-ay)+m3*(ay-by))/D, (m1*(cx2-bx)+m2*(ax-cx2)+m3*(bx-ax))/D];
+  };
+
+  // Use first, middle, last of outer arc
+  const [cx, cy] = circumcenter(outerPts[0], outerPts[Math.floor(segs/2)], outerPts[segs]);
+
+  const outerR = outerPts.reduce((s,p) => s + Math.hypot(p[0]-cx, p[1]-cy), 0) / outerPts.length;
+  const innerR = innerPts.reduce((s,p) => s + Math.hypot(p[0]-cx, p[1]-cy), 0) / innerPts.length;
+
+  // a0 = angle of outerPts[0], a1 = angle of outerPts[segs]
+  const a0 = Math.atan2(outerPts[0][1]-cy, outerPts[0][0]-cx) * 180/Math.PI;
+  const a1 = Math.atan2(outerPts[segs][1]-cy, outerPts[segs][0]-cx) * 180/Math.PI;
+  const aMid = Math.atan2(outerPts[Math.floor(segs/2)][1]-cy, outerPts[Math.floor(segs/2)][0]-cx) * 180/Math.PI;
+
+  // Determine correct span direction: aMid must lie between a0 and a0+span
+  let span = a1 - a0;
+  if (span > 180) span -= 360;
+  if (span < -180) span += 360;
+  // Verify mid is inside span; if not, take the other direction
+  const midCheck = a0 + span/2;
+  const diff = ((aMid - midCheck + 540) % 360) - 180;
+  if (Math.abs(diff) > 45) span = span > 0 ? span - 360 : span + 360;
+
+  return { cx, cy, innerR, outerR, a0, a1: a0 + span };
+}
+
+export interface ArcFillConfig {
+  numRows: number;
+  seatsPerRow: number;
+  startRow?: string;
+  startNumber?: number;
+  category?: Category;
+  basePrice?: number;
+}
+
+export function fillArcSectionWithSeats(
+  section: BShape,
+  config: ArcFillConfig
+): { rows: BRow[]; seats: BSeat[] } {
+  const { numRows, seatsPerRow, startRow = 'A', startNumber = 1, category = 'STANDARD' as Category, basePrice = 100 } = config;
+
+  const arc = detectArcParams(section.vertices);
+  if (!arc) return { rows: [], seats: [] };
+
+  const { cx, cy, innerR, outerR, a0, a1 } = arc;
+  const span = a1 - a0; // signed span in degrees
+
+  // Padding: 4% angular, 4% radial
+  const angPad = Math.abs(span) * 0.04;
+  const radPad = (outerR - innerR) * 0.04;
+  const rStart = innerR + radPad;
+  const rEnd   = outerR - radPad;
+  const aStart = a0 + (span >= 0 ? angPad : -angPad);
+  const aEnd   = a1 - (span >= 0 ? angPad : -angPad);
+  const effectiveSpan = aEnd - aStart; // same sign as span
+
+  const toLabel = (r: number): string => {
+    const base = 26;
+    let off = 0;
+    for (let i = 0; i < startRow.length; i++) off = off * base + (startRow.charCodeAt(i) - 64);
+    off += r;
+    let label = '';
+    while (off > 0) { label = String.fromCharCode(64 + ((off - 1) % base + 1)) + label; off = Math.floor((off - 1) / base); }
+    return label;
+  };
+
+  const outRows: BRow[] = [];
+  const outSeats: BSeat[] = [];
+  let rowLabelIdx = 0; // only increments when a row actually has seats
+
+  // Row spacing: evenly distribute numRows between rStart and rEnd
+  for (let r = 0; r < numRows; r++) {
+    const rowR = numRows === 1 ? (rStart + rEnd) / 2 : rStart + (rEnd - rStart) * (r / (numRows - 1));
+
+    // Seats per row: based on arc circumference at this radius
+    const arcLen = Math.abs(rowR * effectiveSpan * Math.PI / 180);
+    // Seat spacing derived from outermost row to keep consistent size
+    const outerArcLen = Math.abs(rEnd * effectiveSpan * Math.PI / 180);
+    const seatSpacing = outerArcLen / (seatsPerRow + 0.5);
+    const nSeats = Math.min(seatsPerRow, Math.max(1, Math.floor(arcLen / seatSpacing)));
+
+    const rowId = `row-${section.id}-${r}`;
+    const rowLabel = toLabel(rowLabelIdx);
+    const rowSeats: BSeat[] = [];
+
+    for (let s = 0; s < nSeats; s++) {
+      // Center seats within the row's arc
+      const t = nSeats > 1 ? (s + 0.5) / nSeats : 0.5;
+      const angleDeg = aStart + t * effectiveSpan;
+      const angleRad = angleDeg * Math.PI / 180;
+      const x = cx + Math.cos(angleRad) * rowR;
+      const y = cy + Math.sin(angleRad) * rowR;
+
+      if (!pointInPoly(x, y, section.vertices)) continue;
+
+      rowSeats.push({
+        id: `seat-${rowId}-${s}`, rowId, sectionId: section.id,
+        number: startNumber + s, label: `${rowLabel}${startNumber + s}`,
+        x, y, price: basePrice, status: 'available', category,
+      });
+    }
+
+    if (rowSeats.length === 0) continue;
+    rowLabelIdx++; // only advance label when row has seats
+    outRows.push({ id: rowId, sectionId: section.id, label: rowLabel, category, seats: rowSeats });
+    outSeats.push(...rowSeats);
+  }
+
+  return { rows: outRows, seats: outSeats };
 }

@@ -1,9 +1,11 @@
 'use client';
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import * as THREE from 'three';
+import { motion, AnimatePresence } from 'framer-motion';
 import { SECTIONS, ALL_SEATS, arcPolygon, CAT_HEX } from '@/data/stadiumEngine';
 import { useViewerStore } from '@/store/viewerStore';
 import type { StadiumSeat, StadiumSection } from '@/data/stadiumEngine';
+import { unpackLayout } from '../../utils/stadiumOptimizer';
 
 const C_HOVER    = new THREE.Color(0xffffff);
 const C_SELECTED = new THREE.Color(0x10B981);
@@ -58,6 +60,35 @@ export default function StadiumViewer({ className }: { className?: string }) {
   const isDragging = useRef(false);
   const lastMouse  = useRef({ x: 0, y: 0 });
   const zoomLevel  = useRef(1);
+
+  // ── Seat hover tooltip ─────────────────────────────────────────────────────
+  const [seatTooltip, setSeatTooltip] = useState<{
+    screenX: number; screenY: number;
+    seat: StadiumSeat;
+  } | null>(null);
+
+  // ── Load custom venue from localStorage ───────────────────────────────────
+  const customSeatsRef = useRef<StadiumSeat[] | null>(null);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('ticketflow_live_preview');
+      if (!raw) return;
+      const compact = JSON.parse(raw);
+      const layout = unpackLayout(compact);
+      const customSeats: StadiumSeat[] = layout.seats.map(s => ({
+        id: s.id,
+        sectionId: s.sectionId,
+        row: s.label.replace(/\d+$/, ''),
+        number: s.number,
+        x: s.x,
+        y: s.y,
+        status: (s.status === 'available' ? 'available' : s.status === 'sold' ? 'sold' : 'locked') as StadiumSeat['status'],
+        price: s.price,
+        category: s.category as StadiumSeat['category'],
+      }));
+      if (customSeats.length > 0) customSeatsRef.current = customSeats;
+    } catch { /* ignore */ }
+  }, []);
   const hoveredIdx = useRef(-1);
   const selSet     = useRef<Set<string>>(new Set());
 
@@ -129,7 +160,7 @@ export default function StadiumViewer({ className }: { className?: string }) {
     });
 
     // ── InstancedMesh seats ─────────────────────────────────────────────────
-    const seats = ALL_SEATS;
+    const seats = customSeatsRef.current ?? ALL_SEATS;
     seatData.current = seats;
     const geo = new THREE.CircleGeometry(1.8, 6);
     const mat = new THREE.MeshBasicMaterial({ vertexColors: true });
@@ -226,8 +257,22 @@ export default function StadiumViewer({ className }: { className?: string }) {
       if (newIdx !== hoveredIdx.current) {
         if (hoveredIdx.current !== -1) refreshColor(hoveredIdx.current);
         hoveredIdx.current = newIdx;
-        if (newIdx !== -1) { refreshColor(newIdx); setHovered(seatData.current[newIdx].id); }
-        else setHovered(null);
+        if (newIdx !== -1) {
+          refreshColor(newIdx);
+          setHovered(seatData.current[newIdx].id);
+          // Compute 2D screen position from 3D world position
+          const seat = seatData.current[newIdx];
+          const worldPos = new THREE.Vector3(seat.x, seat.y, 1);
+          worldPos.project(cam);
+          const el2 = mountRef.current!;
+          const r2 = el2.getBoundingClientRect();
+          const sx = ((worldPos.x + 1) / 2) * r2.width;
+          const sy = ((-worldPos.y + 1) / 2) * r2.height;
+          setSeatTooltip({ screenX: sx, screenY: sy, seat });
+        } else {
+          setHovered(null);
+          setSeatTooltip(null);
+        }
       }
       return;
     }
@@ -293,5 +338,50 @@ export default function StadiumViewer({ className }: { className?: string }) {
     };
   }, [onWheel, onMouseDown, onMouseMove, onMouseUp, onClick]);
 
-  return <div ref={mountRef} className={className} style={{ width: '100%', height: '100%' }} />;
+  return <div ref={mountRef} className={className} style={{ width: '100%', height: '100%', position: 'relative' }}>
+    <AnimatePresence>
+      {seatTooltip && (
+        <motion.div
+          key="3d-seat-tooltip"
+          initial={{ opacity: 0, y: 6, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.96 }}
+          transition={{ duration: 0.12 }}
+          style={{
+            position: 'absolute',
+            left: seatTooltip.screenX + 14,
+            top: seatTooltip.screenY - 10,
+            pointerEvents: 'none',
+            zIndex: 100,
+            background: 'rgba(8,12,24,0.97)',
+            backdropFilter: 'blur(20px)',
+            border: `1px solid #${(CAT_HEX[seatTooltip.seat.category] ?? 0x3b82f6).toString(16).padStart(6, '0')}44`,
+            borderRadius: 10,
+            padding: '10px 14px',
+            minWidth: 160,
+            boxShadow: '0 12px 40px rgba(0,0,0,0.7)',
+            fontFamily: 'Inter,Outfit,sans-serif',
+          }}
+        >
+          <div style={{ fontSize: 10, fontWeight: 700, color: '#4b5563', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>
+            {seatTooltip.seat.category}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px', fontSize: 11 }}>
+            <span style={{ color: '#64748b' }}>Row</span>
+            <span style={{ color: '#f1f5f9', fontWeight: 700 }}>{seatTooltip.seat.row}</span>
+            <span style={{ color: '#64748b' }}>Seat</span>
+            <span style={{ color: '#f1f5f9', fontWeight: 700 }}>{seatTooltip.seat.number}</span>
+            <span style={{ color: '#64748b' }}>Tier</span>
+            <span style={{ color: `#${(CAT_HEX[seatTooltip.seat.category] ?? 0x3b82f6).toString(16).padStart(6, '0')}`, fontWeight: 700 }}>{seatTooltip.seat.category}</span>
+            <span style={{ color: '#64748b' }}>Price</span>
+            <span style={{ color: '#10b981', fontWeight: 800 }}>${seatTooltip.seat.price}</span>
+            <span style={{ color: '#64748b' }}>Status</span>
+            <span style={{ color: seatTooltip.seat.status === 'sold' ? '#ef4444' : '#10b981', fontWeight: 700, textTransform: 'capitalize' }}>
+              {seatTooltip.seat.status}
+            </span>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  </div>;
 }

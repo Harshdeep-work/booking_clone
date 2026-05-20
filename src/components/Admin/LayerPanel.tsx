@@ -1,16 +1,13 @@
 'use client';
-import { useState } from 'react';
-import { DEFAULT_LAYERS, type LayerState, type LayerId } from './builderTypes2';
+import { type LayerState, type LayerId } from './builderTypes2';
 
 interface Props {
+  layers: LayerState[];
+  onToggle: (id: LayerId, key: 'visible' | 'locked') => void;
   onClose: () => void;
 }
 
-export default function LayerPanel({ onClose }: Props) {
-  const [layers, setLayers] = useState<LayerState[]>(DEFAULT_LAYERS);
-
-  const toggle = (id: LayerId, key: 'visible' | 'locked') =>
-    setLayers(ls => ls.map(l => l.id === id ? { ...l, [key]: !l[key] } : l));
+export default function LayerPanel({ layers, onToggle, onClose }: Props) {
 
   return (
     <div style={{
@@ -47,7 +44,7 @@ export default function LayerPanel({ onClose }: Props) {
 
             {/* Lock */}
             <button
-              onClick={() => toggle(layer.id, 'locked')}
+              onClick={() => onToggle(layer.id, 'locked')}
               title={layer.locked ? 'Unlock' : 'Lock'}
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: layer.locked ? 'var(--accent)' : 'var(--text-3)', padding: 2, lineHeight: 1 }}
             >
@@ -59,7 +56,7 @@ export default function LayerPanel({ onClose }: Props) {
 
             {/* Visibility */}
             <button
-              onClick={() => toggle(layer.id, 'visible')}
+              onClick={() => onToggle(layer.id, 'visible')}
               title={layer.visible ? 'Hide' : 'Show'}
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: layer.visible ? 'var(--text-2)' : 'var(--text-3)', padding: 2, lineHeight: 1 }}
             >

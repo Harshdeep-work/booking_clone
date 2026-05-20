@@ -1,5 +1,5 @@
 // ── Types ─────────────────────────────────────────────────────────────────────
-export type ToolId = 'select' | 'section' | 'rect' | 'circle' | 'ellipse' | 'triangle' | 'diamond' | 'pentagon' | 'hexagon' | 'star' | 'row' | 'multirow' | 'arcrow' | 'block' | 'text' | 'pan' | 'grid' | 'curve' | '4corner' | 'table' | 'rotate' | 'split' | 'merge';
+export type ToolId = 'select' | 'seatselect' | 'section' | 'rect' | 'circle' | 'ellipse' | 'triangle' | 'diamond' | 'pentagon' | 'hexagon' | 'star' | 'row' | 'multirow' | 'arcrow' | 'block' | 'text' | 'pan' | 'grid' | 'curve' | '4corner' | 'table' | 'rotate' | 'split' | 'merge';
 export type ShapeType = 'section' | 'stage' | 'ga' | 'court' | 'suite' | 'pressbox' | 'scoreboard' | 'tunnel' | 'concourse' | 'ada' | 'text' | 'table' | 'standing';
 export type Category = 'VIP' | 'PREMIUM' | 'STANDARD' | 'BUDGET' | 'GA';
 export type SeatStatus = 'available' | 'sold' | 'locked' | 'obstructed';
@@ -21,6 +21,22 @@ export interface BShape {
   isAccessible?: boolean;
   isObstructed?: boolean;
   subsections?: string[];
+  /** Arc section metadata — when set, rows are drawn as filled arc bands */
+  arcCenter?: [number, number];
+  arcInnerR?: number;
+  arcOuterR?: number;
+  arcA0?: number; // degrees
+  arcA1?: number; // degrees
+  /** Per-section display mode: 'rows' = arc bands only, 'seats' = circles only, 'both' = both */
+  displayMode?: 'rows' | 'seats' | 'both';
+  // Properties panel fields
+  notes?: string;
+  capacity?: number;
+  seatingLayout?: 'circular' | 'rectangular';
+  labelVisible?: boolean;
+  labelFontSize?: number;
+  rotation?: number;
+  scale?: number;
 }
 
 export interface BRow {
@@ -28,8 +44,14 @@ export interface BRow {
   sectionId: string;
   label: string;
   category: Category;
+  color?: string;
   seats: BSeat[];
   curveRadius?: number;
+  /** If set, seats are arranged along an arc centred here */
+  curveCenter?: [number, number];
+  /** Arc start/end angles in degrees (only used when curveCenter is set) */
+  curveA0?: number;
+  curveA1?: number;
   priceOverride?: number;
 }
 
@@ -43,6 +65,7 @@ export interface BSeat {
   price: number;
   status: SeatStatus;
   category: Category;
+  color?: string;
   isAccessible?: boolean;
   isCompanion?: boolean;
   isObstructed?: boolean;
@@ -271,7 +294,54 @@ export function generateBlockSeats(
   return { rows: outRows, seats: outSeats };
 }
 
-// ── NBA Arena Template (Little Caesars Arena — accurate layout) ───────────────
+/**
+ * Generate concentric curved rows inside a section.
+ * cx/cy = arc centre (usually the stage/field centre).
+ * innerRadius = radius of the first (closest) row.
+ * rowCount = number of rows.
+ * rowSpacing = distance between consecutive rows.
+ * a0deg/a1deg = arc sweep in degrees.
+ */
+export function generateCurvedRows(
+  cx: number, cy: number,
+  innerRadius: number,
+  rowCount: number,
+  rowSpacing: number,
+  a0deg: number, a1deg: number,
+  sectionId: string,
+  category: Category,
+  price: number,
+  startLabelIndex = 0,
+): { rows: BRow[]; seats: BSeat[] } {
+  const outRows: BRow[] = [];
+  const outSeats: BSeat[] = [];
+  for (let r = 0; r < rowCount; r++) {
+    const radius = innerRadius + r * rowSpacing;
+    const rowLabel = String.fromCharCode(65 + ((startLabelIndex + r) % 26));
+    const rowId = `row-${sectionId}-arc-${r}`;
+    const arcLen = Math.abs(a1deg - a0deg) / 360 * 2 * Math.PI * radius;
+    const seatCount = Math.max(2, Math.floor(arcLen / 13));
+    const rowSeats: BSeat[] = [];
+    for (let i = 0; i < seatCount; i++) {
+      const t = seatCount === 1 ? 0.5 : i / (seatCount - 1);
+      const a = ((a0deg + t * (a1deg - a0deg)) * Math.PI) / 180;
+      rowSeats.push({
+        id: `seat-${rowId}-${i}`,
+        rowId, sectionId,
+        number: i + 1, label: `${rowLabel}${i + 1}`,
+        x: cx + Math.cos(a) * radius,
+        y: cy + Math.sin(a) * radius,
+        price, status: 'available', category,
+      });
+    }
+    outRows.push({
+      id: rowId, sectionId, label: rowLabel, category, seats: rowSeats,
+      curveCenter: [cx, cy], curveRadius: radius, curveA0: a0deg, curveA1: a1deg,
+    });
+    outSeats.push(...rowSeats);
+  }
+  return { rows: outRows, seats: outSeats };
+}
 function uid() { return `${Date.now()}-${Math.random().toString(36).slice(2,6)}`; }
 
 /** Ellipse-arc polygon: scales x by xScale, y by yScale for oval arenas */

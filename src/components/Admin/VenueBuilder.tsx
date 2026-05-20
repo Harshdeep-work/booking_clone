@@ -1,19 +1,21 @@
 'use client';
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import BuilderCanvas from './BuilderCanvas';
-import EnhancedPropertiesPanel from './EnhancedPropertiesPanel';
 import AdvancedToolsPanel from './AdvancedToolsPanel';
 import GenerateDialogs from './GenerateDialogs';
 import LeftPanel from './LeftPanel';
 import EmptyState from './EmptyState';
 import LayerPanel from './LayerPanel';
 import RowManagerPanel from './RowManagerPanel';
+import SectionContextToolbar from './SectionContextToolbar';
+import PropertiesPanel from './PropertiesPanel';
 import { useBuilderEngine } from './useBuilderEngine';
 import { icons } from './BuilderIcons';
 import type { LayoutState } from './builderTypes2';
 import { validateLayout } from './advancedTools';
+import { packLayout } from '../../utils/stadiumOptimizer';
 import './theme.css';
 
 type DialogType = 'ring' | 'arc' | 'block' | null;
@@ -26,9 +28,10 @@ export default function VenueBuilder() {
   const [showHistory, setShowHistory]         = useState(false);
   const [showEmpty, setShowEmpty]             = useState(true);
   const [showAdvancedTools, setShowAdvancedTools] = useState(false);
-  const [advancedTab, setAdvancedTab]         = useState<'grid' | 'tools' | 'import' | 'validate'>('grid');
-  const [rightTab, setRightTab]               = useState<'design'|'data'|'rows'|'ai'>('design');
+  const [advancedTab, setAdvancedTab]         = useState<'tools' | 'spacing' | 'import' | 'validate'>('tools');
+  const [rightTab, setRightTab]               = useState<'data'|'rows'|'ai'|'props'>('rows');
   const [aiInput, setAiInput]                 = useState('');
+  const [spacingInput, setSpacingInput]       = useState(14);
   const [aiMessages, setAiMessages]           = useState<{role:'user'|'assistant';text:string}[]>([
     { role: 'assistant', text: 'Hi! I can help you design your venue layout. Try: "Add 20 rows to section 101" or "Generate an NBA arena".' }
   ]);
@@ -36,9 +39,63 @@ export default function VenueBuilder() {
   const [showLayers, setShowLayers]           = useState(false);
   const [show3D, setShow3D]                   = useState(false);
   const [viewMode, setViewMode]               = useState<'top'|'perspective'>('top');
+  const [seatView, setSeatView]               = useState<'seats'|'rows'>('seats');
+  const [displayModePrompt, setDisplayModePrompt] = useState<string | null>(null); // sectionId pending
+  const [promptStep, setPromptStep] = useState<'display' | 'style'>('display');
+  const [promptDisplayMode, setPromptDisplayMode] = useState<'rows' | 'seats' | 'both'>('seats');
+  const [leftCollapsed, setLeftCollapsed]     = useState(false);
+  const [rightCollapsed, setRightCollapsed]   = useState(false);
+  const [fullscreen, setFullscreen]           = useState(false);
 
   const eng = useBuilderEngine();
   const isEmpty = eng.layout.shapes.length === 0 && eng.layout.seats.length === 0;
+
+  // Track canvas container rect for context toolbar positioning
+  const [containerRect, setContainerRect] = useState<DOMRect | null>(null);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const update = () => setContainerRect(el.getBoundingClientRect());
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    window.addEventListener('scroll', update, true);
+    return () => { ro.disconnect(); window.removeEventListener('scroll', update, true); };
+  }, []);
+
+  // Section stats for the context toolbar
+  const sectionStats = useMemo(() => {
+    if (!eng.selectedShape) return { seatCount: 0, rowCount: 0 };
+    const sid = eng.selectedShape.id;
+    const sectionSeats = eng.layout.seats.filter(s => s.sectionId === sid);
+    const rowIds = new Set(sectionSeats.map(s => s.rowId).filter(Boolean));
+    return { seatCount: sectionSeats.length, rowCount: rowIds.size };
+  }, [eng.selectedShape, eng.layout.seats]);
+
+  // Show display-mode prompt after row/multirow is drawn
+  useEffect(() => {
+    if (eng.rowCommitTick > 0) {
+      setDisplayModePrompt(eng.lastRowSectionId ?? '');
+      setPromptStep('display');
+    }
+  }, [eng.rowCommitTick]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fullscreen toggle (F key) + Escape to exit
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (e.key === 'f' || e.key === 'F') setFullscreen(v => !v);
+      if (e.key === 'Escape') setFullscreen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const handleZoomFit = () => {
+    const el = containerRef.current;
+    eng.zoomFit(el?.clientWidth ?? window.innerWidth, el?.clientHeight ?? window.innerHeight);
+  };
 
   const handleBgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return;
@@ -52,13 +109,14 @@ export default function VenueBuilder() {
     setShowEmpty(false);
   };
 
-  const openAdvanced = (tab: 'grid' | 'tools' | 'import' | 'validate') => {
+  const openAdvanced = (tab: 'tools' | 'spacing' | 'import' | 'validate') => {
     setAdvancedTab(tab);
     setShowAdvancedTools(true);
   };
 
-  const handleApplyGrid = (_sectionId: string, rows: any[], seats: any[]) => {
-    eng.applyGeneratedLayout({ rows, seats });
+  const handleApplyGrid = (sectionId: string, rows: any[], seats: any[]) => {
+    eng.applyGeneratedLayout({ rows, seats, _replaceSectionId: sectionId } as any);
+    setDisplayModePrompt(sectionId);
   };
 
   const handleApplyTemplate = (shape: any) => {
@@ -87,6 +145,13 @@ export default function VenueBuilder() {
     });
   };
 
+  const handleSaveForPreview = () => {
+    const packed = packLayout({ ...eng.layout, venueName: eng.venueName });
+    localStorage.setItem('ticketflow_live_preview', JSON.stringify(packed));
+    setValidationMsg({ ok: true, text: '✓ Saved to preview — open /booking or /3d to see it' });
+    setTimeout(() => setValidationMsg(null), 4000);
+  };
+
   const [validationMsg, setValidationMsg] = useState<{ok:boolean;text:string}|null>(null);
 
   const handleValidate = () => {
@@ -96,17 +161,6 @@ export default function VenueBuilder() {
       : { ok: false, text: result.errors.map(e => e.message).join('\n') }
     );
     setTimeout(() => setValidationMsg(null), 5000);
-  };
-
-  const handleUploadPhoto = async (file: File): Promise<string> => URL.createObjectURL(file);
-
-  const getSelectedEntity = () => eng.selectedShape ?? eng.selectedSeat ?? eng.selectedRow ?? null;
-
-  const handleEntityUpdate = (updates: any) => {
-    if (updates._delete) { eng.deleteSelected(); return; }
-    if (eng.selectedShape) eng.updateShape(updates);
-    else if (eng.selectedSeat) eng.updateSeat(updates);
-    else if (eng.selectedRow) eng.updateRow(eng.selectedRow.id, updates);
   };
 
   const sendAiMessage = () => {
@@ -120,6 +174,7 @@ export default function VenueBuilder() {
 
   const toolHint: Record<string, string> = {
     select:   'Click to select · Shift+click multi-select · Drag to move · Dbl-click section to edit',
+    seatselect: 'Drag to select seats inside rectangle · Shift+drag to add to selection',
     section:  'Click to place points · Dbl-click to close and create section',
     rect:     'Drag to draw a rectangle section',
     row:      'Click start point then end point to place a row of seats',
@@ -134,7 +189,7 @@ export default function VenueBuilder() {
     <div className="tf-admin" data-theme={darkMode ? 'dark' : 'light'}>
 
       {/* ── Top Bar ─────────────────────────────────────────────────────── */}
-      <header className="tf-topbar">
+      {!fullscreen && <header className="tf-topbar">
 
         {/* Left */}
         <div style={{ display:'flex', alignItems:'center', gap:10, minWidth:0 }}>
@@ -235,28 +290,35 @@ export default function VenueBuilder() {
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v7M3 5l3 3 3-3M1 9v1a1 1 0 001 1h8a1 1 0 001-1V9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
             Export
           </button>
+          <button className="tf-chip-btn" onClick={handleSaveForPreview} title="Save design to localStorage for 2D/3D preview">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 6s2-4 5-4 5 4 5 4-2 4-5 4-5-4-5-4z" stroke="currentColor" strokeWidth="1.3"/><circle cx="6" cy="6" r="1.5" stroke="currentColor" strokeWidth="1.2"/></svg>
+            Save for Preview
+          </button>
+          <button className="tf-icon-btn" onClick={() => setFullscreen(v => !v)} title="Fullscreen (F)">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M1 5V2h3M10 2h3v3M13 9v3h-3M4 12H1V9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
         </div>
-      </header>
+      </header>}
 
       <div className="tf-body">
 
         {/* ── Left Sidebar ──────────────────────────────────────────────── */}
-        <LeftPanel
-          activeTool={eng.tool}
-          onTool={eng.changeTool}
-          snapOn={eng.snapOn}
-          onSnap={() => eng.setSnapOn(!eng.snapOn)}
-          onInsertPreset={handleInsertPreset}
-          onDialog={setDialog}
-          onOpenAdvanced={openAdvanced}
-        />
+        {!leftCollapsed && !fullscreen && (
+          <LeftPanel
+            activeTool={eng.tool}
+            onTool={eng.changeTool}
+            snapOn={eng.snapOn}
+            onSnap={() => eng.setSnapOn(!eng.snapOn)}
+            onInsertPreset={handleInsertPreset}
+            onDialog={setDialog}
+            onOpenAdvanced={openAdvanced}
+          />
+        )}
 
         {/* ── Canvas ────────────────────────────────────────────────────── */}
-        <div className="tf-canvas-wrap" style={viewMode === 'perspective' ? {
-          perspective: '800px',
-          backgroundImage: 'radial-gradient(circle, var(--border) 1px, transparent 1px)',
-          backgroundSize: '24px 24px',
-        } : undefined}>
+        <div className="tf-canvas-wrap">
           <BuilderCanvas
             layout={eng.layout}
             camera={eng.camera}
@@ -274,11 +336,156 @@ export default function VenueBuilder() {
             canvasRef={canvasRef}
             containerRef={containerRef}
             cursor={eng.cursor}
+            seatView={seatView}
+            orphanDisplayModes={eng.orphanDisplayModes}
+            orphanRenderStyles={eng.orphanRenderStyles}
+            layers={eng.layers}
           />
 
           <AnimatePresence>
             {isEmpty && showEmpty && <EmptyState onDismiss={() => setShowEmpty(false)} />}
           </AnimatePresence>
+
+          {/* ── Section Context Toolbar ─────────────────────────────────── */}
+          <AnimatePresence>
+            {eng.selectedShape && eng.selectedIds.size === 1 && !eng.sectionMode && (
+              <SectionContextToolbar
+                key={eng.selectedShape.id}
+                shape={eng.selectedShape}
+                camera={eng.camera}
+                containerRect={containerRect}
+                onFillSection={eng.fillSection}
+                onAddRow={eng.addRow}
+                onSplitSection={eng.splitSection}
+                onDblClickSection={() => {
+                  const vs = eng.selectedShape!.vertices;
+                  const cx = vs.reduce((s, v) => s + v[0], 0) / vs.length;
+                  const cy = vs.reduce((s, v) => s + v[1], 0) / vs.length;
+                  eng.onDblClick(cx, cy);
+                }}
+                onDelete={eng.deleteSelected}
+                onSetDisplayMode={eng.setDisplayMode}
+                onAutoBalance={eng.autoBalance}
+                seatCount={sectionStats.seatCount}
+                rowCount={sectionStats.rowCount}
+              />
+            )}
+          </AnimatePresence>
+
+          {/* Left collapse toggle */}
+          {!fullscreen && <button
+            onClick={() => setLeftCollapsed(v => !v)}
+            title={leftCollapsed ? 'Show panel' : 'Hide panel'}
+            style={{
+              position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)',
+              width: 16, height: 40, border: 'none', borderRadius: '0 6px 6px 0',
+              background: 'var(--panel)', boxShadow: '2px 0 6px rgba(0,0,0,0.08)',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--text-3)', zIndex: 10, padding: 0,
+            }}
+          >
+            <svg width="8" height="12" viewBox="0 0 8 12" fill="none">
+              <path d={leftCollapsed ? 'M2 1l4 5-4 5' : 'M6 1L2 6l4 5'} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>}
+
+          {/* Right collapse toggle */}
+          {!fullscreen && <button
+            onClick={() => setRightCollapsed(v => !v)}
+            title={rightCollapsed ? 'Show panel' : 'Hide panel'}
+            style={{
+              position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)',
+              width: 16, height: 40, border: 'none', borderRadius: '6px 0 0 6px',
+              background: 'var(--panel)', boxShadow: '-2px 0 6px rgba(0,0,0,0.08)',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--text-3)', zIndex: 10, padding: 0,
+            }}
+          >
+            <svg width="8" height="12" viewBox="0 0 8 12" fill="none">
+              <path d={rightCollapsed ? 'M6 1L2 6l4 5' : 'M2 1l4 5-4 5'} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>}
+
+          {/* View mode toggle */}
+          <div style={{
+            position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)',
+            background: 'var(--panel)', borderRadius: 999,
+            boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
+            padding: '4px',
+            display: 'flex', flexDirection: 'column', gap: 2,
+          }}>
+            {(['seats', 'rows'] as const).map(mode => (
+              <button
+                key={mode}
+                title={mode === 'seats' ? 'Show seats on zoom' : 'Rows only'}
+                onClick={() => setSeatView(mode)}
+                style={{
+                  width: 36, height: 28, border: 'none', borderRadius: 999,
+                  background: seatView === mode ? 'var(--text-1)' : 'none',
+                  color: seatView === mode ? 'var(--panel)' : 'var(--text-3)',
+                  cursor: 'pointer', fontSize: 9, fontWeight: 700,
+                  letterSpacing: 0.3, transition: 'all 0.12s',
+                }}
+              >{mode === 'seats' ? 'Seats' : 'Rows'}</button>
+            ))}
+          </div>
+
+          {/* Zoom controls */}
+          <div style={{
+            position: 'absolute', right: 16, bottom: 56,
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            background: 'var(--panel)', borderRadius: 999,
+            boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
+            padding: '6px 0',
+          }}>
+            {([
+              { label: '+', onClick: eng.zoomIn, title: 'Zoom in' },
+              { label: '−', onClick: eng.zoomOut, title: 'Zoom out' },
+              { label: '↺', onClick: eng.zoomReset, title: 'Reset zoom (1:1)' },
+              { label: '⊡', onClick: handleZoomFit, title: 'Zoom to fit (all content)' },
+            ] as const).map(({ label, onClick, title }) => (
+              <button key={label} title={title} onClick={onClick}
+                style={{
+                  width: 36, height: 36, border: 'none', background: 'none',
+                  cursor: 'pointer', fontSize: label === '↺' || label === '⊡' ? 17 : 22, lineHeight: 1,
+                  color: 'var(--text-1)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  borderRadius: '50%', transition: 'background 0.12s',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+              >{label}</button>
+            ))}
+          </div>
+
+          {/* Spacing toolbar — shown when seats are selected */}
+          {eng.selectedIds.size > 1 && [...eng.selectedIds].some(id => eng.layout.seats.find(s => s.id === id)) && (
+            <div style={{
+              position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)',
+              background: 'var(--panel)', borderRadius: 10, boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
+              display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', zIndex: 20,
+              fontSize: 11, fontWeight: 600, color: 'var(--text-2)',
+            }}>
+              <span>{eng.selectedIds.size} seats</span>
+              <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
+              <button onClick={() => eng.distributeSeats('h')} title="Distribute horizontally"
+                style={{ padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg)', cursor: 'pointer', fontSize: 11, fontWeight: 600, color: 'var(--text-1)' }}>
+                ↔ Distribute H
+              </button>
+              <button onClick={() => eng.distributeSeats('v')} title="Distribute vertically"
+                style={{ padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg)', cursor: 'pointer', fontSize: 11, fontWeight: 600, color: 'var(--text-1)' }}>
+                ↕ Distribute V
+              </button>
+              <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
+              <span>Spacing</span>
+              <input type="number" value={spacingInput} min={4} max={100}
+                onChange={e => setSpacingInput(+e.target.value)}
+                style={{ width: 44, padding: '2px 6px', borderRadius: 6, border: '1px solid var(--border)', fontSize: 11, fontWeight: 700, textAlign: 'center', background: 'var(--bg)', color: 'var(--text-1)' }} />
+              <button onClick={() => eng.setSpacing(spacingInput, 'h')}
+                style={{ padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg)', cursor: 'pointer', fontSize: 11, fontWeight: 600, color: 'var(--text-1)' }}>H</button>
+              <button onClick={() => eng.setSpacing(spacingInput, 'v')}
+                style={{ padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg)', cursor: 'pointer', fontSize: 11, fontWeight: 600, color: 'var(--text-1)' }}>V</button>
+            </div>
+          )}
 
           {/* Validation toast */}
           <AnimatePresence>
@@ -328,29 +535,26 @@ export default function VenueBuilder() {
               )}
               <span className="tf-status-badge">{eng.tool.toUpperCase()}</span>
               {eng.snapOn && <span className="tf-status-badge snap">SNAP</span>}
+              {fullscreen && (
+                <button onClick={() => setFullscreen(false)}
+                  style={{fontSize:10,fontWeight:700,background:'var(--text-1)',color:'var(--panel)',border:'none',borderRadius:6,padding:'2px 8px',cursor:'pointer',fontFamily:'inherit'}}>
+                  ESC — Exit Fullscreen
+                </button>
+              )}
             </div>
           </div>
         </div>
 
         {/* ── Right Panel ───────────────────────────────────────────────── */}
+        {!rightCollapsed && !fullscreen && (
         <div className="tf-right-panel">
           <div className="tf-panel-tabs">
-            {(['design','data','rows','ai'] as const).map(t => (
+            {(['data','rows','ai','props'] as const).map(t => (
               <button key={t} className={`tf-panel-tab${rightTab===t?' active':''}`} onClick={() => setRightTab(t)}>
-                {t === 'design' ? 'Design' : t === 'data' ? 'Data' : t === 'rows' ? 'Rows' : 'AI'}
+                {t === 'data' ? 'Data' : t === 'rows' ? 'Rows' : t === 'ai' ? 'AI' : 'Props'}
               </button>
             ))}
           </div>
-
-          {rightTab === 'design' && (
-            <div className="tf-panel-body">
-              <EnhancedPropertiesPanel
-                selectedEntity={getSelectedEntity()}
-                onUpdate={handleEntityUpdate}
-                onUploadPhoto={handleUploadPhoto}
-              />
-            </div>
-          )}
 
           {rightTab === 'data' && (
             <div className="tf-panel-body">
@@ -391,11 +595,17 @@ export default function VenueBuilder() {
                 onDeleteRow={eng.deleteRow}
                 onDuplicateRow={eng.duplicateRow}
                 onUpdateRow={(rowId, updates) => eng.updateRow(rowId, updates)}
+                onClearRowSeats={eng.clearRowSeats}
+                onRestoreRowSeats={eng.restoreRowSeats}
+                onSplitRow={(rowId, seatIds) => eng.splitRow(rowId, seatIds)}
                 onSelectSeat={(seatId) => {
                   eng.selectEntity(seatId);
                   eng.changeTool('select');
                 }}
                 selectedSeatId={eng.selectedSeat?.id || null}
+                onAddCurvedRows={(sectionId, ...args) => { eng.addCurvedRows(sectionId, ...args); setDisplayModePrompt(sectionId); }}
+                onCreateArcSection={eng.createArcSection}
+                onSetDisplayMode={eng.setDisplayMode}
               />
             </div>
           )}
@@ -422,7 +632,41 @@ export default function VenueBuilder() {
               </div>
             </div>
           )}
+
+          {rightTab === 'props' && (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              {eng.selectedShape || eng.selectedSeat || eng.selectedText || eng.selectedRow || eng.selectedIds.size > 0 ? (
+                <PropertiesPanel
+                  key={eng.selectedShape?.id ?? eng.selectedSeat?.id ?? eng.selectedText?.id ?? 'none'}
+                  shape={eng.selectedShape ?? (eng.sectionMode ? eng.layout.shapes.find(s => s.id === eng.sectionMode) ?? null : null)}
+                  seat={eng.selectedSeat}
+                  text={eng.selectedText}
+                  row={eng.selectedRow}
+                  multiCount={eng.selectedIds.size}
+                  onShape={(u) => eng.updateShape(u, eng.selectedShape?.id ?? eng.sectionMode ?? undefined)}
+                  onSeat={eng.updateSeat}
+                  onText={eng.updateText}
+                  onRow={eng.updateRow}
+                  onMultiCategory={(cat) => eng.multiUpdate({ category: cat })}
+                  onMultiPrice={(price) => eng.multiUpdate({ price })}
+                  onMultiStatus={(status) => eng.multiUpdate({ status })}
+                  onDelete={eng.deleteSelected}
+                  onFillSection={eng.fillSection}
+                  sectionMode={eng.sectionMode}
+                  totalElements={eng.layout.seats.length + eng.layout.shapes.length + eng.layout.texts.length}
+                  totalSeats={eng.layout.seats.length}
+                  totalSections={eng.layout.shapes.filter(s => s.type === 'section').length}
+                  selectedCount={eng.selectedIds.size}
+                />
+              ) : (
+                <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-3)', fontSize: 12 }}>
+                  Select an item (section, seat, or text label) to edit its properties
+                </div>
+              )}
+            </div>
+          )}
         </div>
+        )}
 
         {/* ── Advanced Tools ────────────────────────────────────────────── */}
         <AnimatePresence>
@@ -430,7 +674,7 @@ export default function VenueBuilder() {
             <motion.div key="advanced"
               initial={{x:320,opacity:0}} animate={{x:0,opacity:1}} exit={{x:320,opacity:0}}
               transition={{type:'spring',stiffness:320,damping:32}}
-              style={{flexShrink:0,boxShadow:'-4px 0 24px rgba(0,0,0,0.08)'}}
+              style={{flexShrink:0,boxShadow:'-4px 0 24px rgba(0,0,0,0.08)',position:'relative',zIndex:10,height:'100%'}}
             >
               <AdvancedToolsPanel
                 layout={eng.layout}
@@ -444,6 +688,9 @@ export default function VenueBuilder() {
                 onSplitSection={eng.splitSection}
                 onMergeSections={eng.mergeSections}
                 onRotate={eng.rotateSelected}
+                onAddAisle={eng.addAisle}
+                onSetDensity={eng.setSectionDensity}
+                onAutoBalance={eng.autoBalance}
                 activeTab={advancedTab}
                 onTabChange={setAdvancedTab}
               />
@@ -457,7 +704,7 @@ export default function VenueBuilder() {
             <motion.div key="history"
               initial={{x:240,opacity:0}} animate={{x:0,opacity:1}} exit={{x:240,opacity:0}}
               transition={{type:'spring',stiffness:320,damping:32}}
-              style={{width:220,background:'var(--panel)',borderLeft:'1px solid var(--border)',display:'flex',flexDirection:'column',flexShrink:0}}
+              style={{width:220,background:'var(--panel)',borderLeft:'1px solid var(--border)',display:'flex',flexDirection:'column',flexShrink:0,position:'relative',zIndex:10,height:'100%'}}
             >
               <div style={{padding:'12px 14px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                 <span style={{fontSize:11,fontWeight:700,color:'var(--text-1)'}}>History</span>
@@ -491,8 +738,13 @@ export default function VenueBuilder() {
             <motion.div key="layers"
               initial={{x:240,opacity:0}} animate={{x:0,opacity:1}} exit={{x:240,opacity:0}}
               transition={{type:'spring',stiffness:320,damping:32}}
+              style={{position:'relative',zIndex:10,height:'100%'}}
             >
-              <LayerPanel onClose={() => setShowLayers(false)} />
+              <LayerPanel
+                layers={eng.layers}
+                onToggle={eng.toggleLayer}
+                onClose={() => setShowLayers(false)}
+              />
             </motion.div>
           )}
         </AnimatePresence>
@@ -519,8 +771,79 @@ export default function VenueBuilder() {
       <GenerateDialogs
         open={dialog}
         onClose={() => setDialog(null)}
-        onApply={patch => { eng.applyGeneratedLayout(patch); setShowEmpty(false); }}
+        onApply={patch => {
+          eng.applyGeneratedLayout(patch);
+          setShowEmpty(false);
+          // Prompt display mode if seats were generated
+          const sid = patch.shapes?.[0]?.id;
+          if (sid && patch.seats && patch.seats.length > 0) setDisplayModePrompt(sid);
+        }}
       />
+
+      {/* ── Display Mode Prompt ─────────────────────────────────────────── */}
+      {displayModePrompt !== null && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'var(--bg, #fff)', borderRadius: 16, padding: '28px 32px', boxShadow: '0 8px 40px rgba(0,0,0,0.22)', minWidth: 360, textAlign: 'center' }}>
+
+            {promptStep === 'display' ? (<>
+              <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>How would you like to display this layout?</div>
+              <div style={{ fontSize: 12, color: '#64748b', marginBottom: 20 }}>Step 1 of 2 — Display mode</div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                {([
+                  { key: 'rows',  icon: '≡', label: 'Rows Only',    desc: 'Thin guide lines, no seat circles' },
+                  { key: 'both',  icon: '⊞', label: 'Rows + Seats', desc: 'Guide lines + seats on zoom in' },
+                  { key: 'seats', icon: '●', label: 'Seats Only',   desc: 'Individual seat circles always visible' },
+                ] as const).map(m => (
+                  <button key={m.key} onClick={() => { setPromptDisplayMode(m.key); setPromptStep('style'); }} style={{
+                    flex: 1, padding: '14px 8px', borderRadius: 12, cursor: 'pointer',
+                    border: '1.5px solid var(--border, #e2e8f0)', background: 'var(--bg, #fff)',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                    transition: 'border-color 0.15s, background 0.15s',
+                  }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#3b82f6'; (e.currentTarget as HTMLButtonElement).style.background = '#eff6ff'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border, #e2e8f0)'; (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg, #fff)'; }}
+                  >
+                    <span style={{ fontSize: 22 }}>{m.icon}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700 }}>{m.label}</span>
+                    <span style={{ fontSize: 10, color: '#94a3b8', lineHeight: 1.4 }}>{m.desc}</span>
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => setDisplayModePrompt(null)} style={{ marginTop: 16, fontSize: 11, color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer' }}>Skip</button>
+            </>) : (<>
+              <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>What kind of rows do you want?</div>
+              <div style={{ fontSize: 12, color: '#64748b', marginBottom: 20 }}>Step 2 of 2 — Row appearance</div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                {([
+                  { key: 'dots', icon: '⬤ ⬤ ⬤', label: 'Dots',       desc: 'Individual seat circles' },
+                  { key: 'bar',  icon: '━━━━━',   label: 'Bar',        desc: 'Solid filled row bar' },
+                  { key: 'line', icon: '─────',   label: 'Line',       desc: 'Thin guide line only' },
+                ] as const).map(m => (
+                  <button key={m.key} onClick={() => {
+                    eng.setDisplayMode(displayModePrompt, promptDisplayMode);
+                    eng.setRowRenderStyle(displayModePrompt, m.key);
+                    setDisplayModePrompt(null);
+                  }} style={{
+                    flex: 1, padding: '14px 8px', borderRadius: 12, cursor: 'pointer',
+                    border: '1.5px solid var(--border, #e2e8f0)', background: 'var(--bg, #fff)',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                    transition: 'border-color 0.15s, background 0.15s',
+                  }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#3b82f6'; (e.currentTarget as HTMLButtonElement).style.background = '#eff6ff'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border, #e2e8f0)'; (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg, #fff)'; }}
+                  >
+                    <span style={{ fontSize: m.key === 'dots' ? 10 : 16, fontWeight: 700, letterSpacing: m.key === 'dots' ? 3 : 0, color: '#475569' }}>{m.icon}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700 }}>{m.label}</span>
+                    <span style={{ fontSize: 10, color: '#94a3b8', lineHeight: 1.4 }}>{m.desc}</span>
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => setPromptStep('display')} style={{ marginTop: 16, fontSize: 11, color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer' }}>← Back</button>
+            </>)}
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }
