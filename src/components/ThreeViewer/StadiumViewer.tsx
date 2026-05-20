@@ -6,6 +6,7 @@ import { SECTIONS, ALL_SEATS, arcPolygon, CAT_HEX } from '@/data/stadiumEngine';
 import { useViewerStore } from '@/store/viewerStore';
 import type { StadiumSeat, StadiumSection } from '@/data/stadiumEngine';
 import { unpackLayout } from '../../utils/stadiumOptimizer';
+import { loadPreviewLayout } from '../../utils/previewStorage';
 
 const C_HOVER    = new THREE.Color(0xffffff);
 const C_SELECTED = new THREE.Color(0x10B981);
@@ -70,24 +71,27 @@ export default function StadiumViewer({ className }: { className?: string }) {
   // ── Load custom venue from localStorage ───────────────────────────────────
   const customSeatsRef = useRef<StadiumSeat[] | null>(null);
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem('ticketflow_live_preview');
-      if (!raw) return;
-      const compact = JSON.parse(raw);
-      const layout = unpackLayout(compact);
-      const customSeats: StadiumSeat[] = layout.seats.map(s => ({
-        id: s.id,
-        sectionId: s.sectionId,
-        row: s.label.replace(/\d+$/, ''),
-        number: s.number,
-        x: s.x,
-        y: s.y,
-        status: (s.status === 'available' ? 'available' : s.status === 'sold' ? 'sold' : 'locked') as StadiumSeat['status'],
-        price: s.price,
-        category: s.category as StadiumSeat['category'],
-      }));
-      if (customSeats.length > 0) customSeatsRef.current = customSeats;
-    } catch { /* ignore */ }
+    let active = true;
+    (async () => {
+      try {
+        const compact = await loadPreviewLayout();
+        if (!compact || !active) return;
+        const layout = unpackLayout(compact);
+        const customSeats: StadiumSeat[] = layout.seats.map(s => ({
+          id: s.id,
+          sectionId: s.sectionId,
+          row: s.label.replace(/\d+$/, ''),
+          number: s.number,
+          x: s.x,
+          y: s.y,
+          status: (s.status === 'available' ? 'available' : s.status === 'sold' ? 'sold' : 'locked') as StadiumSeat['status'],
+          price: s.price,
+          category: s.category as StadiumSeat['category'],
+        }));
+        if (customSeats.length > 0) customSeatsRef.current = customSeats;
+      } catch { /* ignore */ }
+    })();
+    return () => { active = false; };
   }, []);
   const hoveredIdx = useRef(-1);
   const selSet     = useRef<Set<string>>(new Set());

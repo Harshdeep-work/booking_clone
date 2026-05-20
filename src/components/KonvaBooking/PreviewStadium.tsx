@@ -2,6 +2,7 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { unpackLayout } from '../../utils/stadiumOptimizer';
+import { loadPreviewLayout } from '../../utils/previewStorage';
 import type { LayoutState, BShape, BSeat } from '../Admin/builderTypes2';
 import { CAT_COLOR } from '../Admin/builderTypes2';
 
@@ -43,13 +44,17 @@ export default function PreviewStadium({ selectedIds, onSeatToggle, onShapeClick
 
   // ── Load localStorage ─────────────────────────────────────────────────────
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem('ticketflow_live_preview');
-      if (!raw) return;
-      const l = unpackLayout(JSON.parse(raw));
-      layoutRef.current = l;
-      setLayout(l);
-    } catch (e) { console.error('PreviewStadium load error', e); }
+    let active = true;
+    (async () => {
+      try {
+        const raw = await loadPreviewLayout();
+        if (!raw || !active) return;
+        const l = unpackLayout(raw);
+        layoutRef.current = l;
+        setLayout(l);
+      } catch (e) { console.error('PreviewStadium load error', e); }
+    })();
+    return () => { active = false; };
   }, []);
 
   // ── Auto-fit (runs when BOTH layout AND real size are known) ──────────────

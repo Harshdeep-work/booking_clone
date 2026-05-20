@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import type { BSeat, BShape } from '../Admin/builderTypes2';
 import { CAT_COLOR } from '../Admin/builderTypes2';
 import { unpackLayout } from '../../utils/stadiumOptimizer';
+import { loadPreviewLayout } from '../../utils/previewStorage';
 import type { LayoutState } from '../Admin/builderTypes2';
 
 const PreviewStadium = dynamic(() => import('./PreviewStadium'), { ssr: false });
@@ -389,10 +390,15 @@ export default function StadiumBooking() {
   const selectedIds = new Set(selectedSeats.map(s => s.id));
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem('ticketflow_live_preview');
-      if (raw) setLayout(unpackLayout(JSON.parse(raw)));
-    } catch { /* ignore */ }
+    let active = true;
+    (async () => {
+      try {
+        const raw = await loadPreviewLayout();
+        if (!raw || !active) return;
+        setLayout(unpackLayout(raw));
+      } catch { /* ignore */ }
+    })();
+    return () => { active = false; };
   }, []);
 
   const onSeatToggle = useCallback((bseat: BSeat) => {

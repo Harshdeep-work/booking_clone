@@ -16,6 +16,7 @@ import { icons } from './BuilderIcons';
 import type { LayoutState } from './builderTypes2';
 import { validateLayout } from './advancedTools';
 import { packLayout } from '../../utils/stadiumOptimizer';
+import { savePreviewLayoutLocal, savePreviewLayoutRemote } from '../../utils/previewStorage';
 import './theme.css';
 
 type DialogType = 'ring' | 'arc' | 'block' | null;
@@ -147,7 +148,8 @@ export default function VenueBuilder() {
 
   const handleSaveForPreview = () => {
     const packed = packLayout({ ...eng.layout, venueName: eng.venueName });
-    localStorage.setItem('ticketflow_live_preview', JSON.stringify(packed));
+    savePreviewLayoutLocal(packed);
+    savePreviewLayoutRemote(packed);
     setValidationMsg({ ok: true, text: '✓ Saved to preview — open /booking or /3d to see it' });
     setTimeout(() => setValidationMsg(null), 4000);
   };

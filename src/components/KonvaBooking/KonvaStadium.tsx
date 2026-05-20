@@ -6,6 +6,7 @@ import {
   type Section, type Seat, type Tier,
 } from './stadiumData';
 import { unpackLayout } from '../../utils/stadiumOptimizer';
+import { loadPreviewLayout } from '../../utils/previewStorage';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const WORLD = 300;          // half-size of world in world units
@@ -90,35 +91,38 @@ export default function KonvaStadium({ selectedIds, onSeatToggle, onSectionHover
   // ── Load custom venue from localStorage ───────────────────────────────────
   const [customSections, setCustomSections] = useState<Section[] | null>(null);
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem('ticketflow_live_preview');
-      if (!raw) return;
-      const compact = JSON.parse(raw);
-      const layout = unpackLayout(compact);
-      // Convert builder shapes → Section format for the 2D viewer
-      const sections: Section[] = layout.shapes
-        .filter(sh => sh.type === 'section' || sh.type === 'ga')
-        .map((sh, i) => {
-          const shSeats = layout.seats.filter(s => s.sectionId === sh.id);
-          const prices = shSeats.map(s => s.price);
-          const minPrice = prices.length ? Math.min(...prices) : 0;
-          const angleStep = (360 / Math.max(layout.shapes.length, 1));
-          return {
-            id: sh.id,
-            label: sh.label,
-            tier: (sh.category as any) || 'Standard',
-            innerR: 80 + i * 10,
-            outerR: 120 + i * 10,
-            angleStart: i * angleStep - 180,
-            angleEnd: (i + 1) * angleStep - 180,
-            price: minPrice,
-            priceMax: minPrice,
-            available: shSeats.filter(s => s.status === 'available').length,
-            total: shSeats.length,
-          } as Section;
-        });
-      if (sections.length > 0) setCustomSections(sections);
-    } catch { /* ignore parse errors */ }
+    let active = true;
+    (async () => {
+      try {
+        const compact = await loadPreviewLayout();
+        if (!compact || !active) return;
+        const layout = unpackLayout(compact);
+        // Convert builder shapes → Section format for the 2D viewer
+        const sections: Section[] = layout.shapes
+          .filter(sh => sh.type === 'section' || sh.type === 'ga')
+          .map((sh, i) => {
+            const shSeats = layout.seats.filter(s => s.sectionId === sh.id);
+            const prices = shSeats.map(s => s.price);
+            const minPrice = prices.length ? Math.min(...prices) : 0;
+            const angleStep = (360 / Math.max(layout.shapes.length, 1));
+            return {
+              id: sh.id,
+              label: sh.label,
+              tier: (sh.category as any) || 'Standard',
+              innerR: 80 + i * 10,
+              outerR: 120 + i * 10,
+              angleStart: i * angleStep - 180,
+              angleEnd: (i + 1) * angleStep - 180,
+              price: minPrice,
+              priceMax: minPrice,
+              available: shSeats.filter(s => s.status === 'available').length,
+              total: shSeats.length,
+            } as Section;
+          });
+        if (sections.length > 0) setCustomSections(sections);
+      } catch { /* ignore parse errors */ }
+    })();
+    return () => { active = false; };
   }, []);
 
   const activeSections = customSections ?? SECTIONS;
