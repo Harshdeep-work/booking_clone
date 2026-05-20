@@ -34,7 +34,7 @@ interface Props {
   selectedCount: number;
 }
 
-const LBL: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: '#64748b', display: 'block', marginBottom: 5 };
+const LBL: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 5 };
 const INP: React.CSSProperties = {
   width: '100%', padding: '7px 10px', borderRadius: 7,
   border: '1px solid #e2e8f0', background: '#fff',
@@ -47,21 +47,21 @@ const SEC_HDR: React.CSSProperties = { fontSize: 10, fontWeight: 700, color: '#9
 
 function CatPills({ value, onChange, categories = ['VIP', 'PREMIUM', 'STANDARD', 'BUDGET', 'GA'] }: { value: Category; onChange: (c: Category) => void; categories?: string[] }) {
   return (
-    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 12 }}>
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
       {categories.map(c => {
         const active = value === c;
         const col = CAT_COLOR[c as Category] || '#3b82f6';
         return (
           <button key={c} onClick={() => onChange(c as Category)} style={{
-            display: 'flex', alignItems: 'center', gap: 4,
-            padding: '5px 11px', borderRadius: 99, fontSize: 11, fontWeight: 700, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 5,
+            padding: '4px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, cursor: 'pointer',
             border: `1.5px solid ${active ? col : '#e2e8f0'}`,
             background: active ? col + '18' : '#f8fafc',
-            color: active ? col : '#475569',
+            color: active ? col : '#64748b',
             transition: 'all 0.12s',
             boxShadow: active ? `0 0 0 3px ${col}22` : 'none',
           }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: col, flexShrink: 0, opacity: active ? 1 : 0.5 }} />
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: col, flexShrink: 0, opacity: active ? 1 : 0.6 }} />
             {c}
           </button>
         );
@@ -114,10 +114,10 @@ export default function PropertiesPanel(props: Props) {
           exit={{ x: 300, opacity: 0 }}
           transition={{ type: 'spring', stiffness: 340, damping: 34 }}
           style={{
-            width: 272, height: '100%', display: 'flex', flexDirection: 'column',
-            background: '#fff', borderLeft: '1px solid #e2e8f0',
+            width: '100%', height: '100%', display: 'flex', flexDirection: 'column',
+            background: '#fff', 
             fontFamily: 'Inter,sans-serif', flexShrink: 0, overflowY: 'auto',
-            boxShadow: '-4px 0 16px rgba(0,0,0,0.04)',
+            overflowX: 'hidden', boxSizing: 'border-box',
             position: 'relative'
           }}
         >
@@ -281,24 +281,24 @@ export default function PropertiesPanel(props: Props) {
                   <input style={{ ...INP, flex: 1, marginBottom: 0, fontFamily: 'monospace', fontSize: 11 }} value={shape.color} onChange={e => onShape({ color: e.target.value })} />
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#64748b', marginBottom: 4 }}>
-                  <label style={LBL}>Scale</label>
-                  <span style={{ fontWeight: 700, color: '#0f172a' }}>{Math.round((shape.scale ?? 1) * 100)}%</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <label style={{ ...LBL, marginBottom: 0 }}>Scale</label>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#0f172a' }}>{Math.round((shape.scale ?? 1) * 100)}%</span>
                 </div>
                 <input
                   type="range" min={0.1} max={3} step={0.05} value={shape.scale ?? 1}
                   onChange={e => onShape({ scale: +e.target.value })}
-                  style={{ width: '100%', accentColor: '#3b82f6', marginBottom: 12 }}
+                  style={{ width: '100%', accentColor: '#3b82f6', marginBottom: 12, cursor: 'pointer' }}
                 />
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#64748b', marginBottom: 4 }}>
-                  <label style={LBL}>Rotation</label>
-                  <span style={{ fontWeight: 700, color: '#0f172a' }}>{Math.round(shape.rotation ?? 0)}°</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <label style={{ ...LBL, marginBottom: 0 }}>Rotation</label>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#0f172a' }}>{Math.round(shape.rotation ?? 0)}°</span>
                 </div>
                 <input
                   type="range" min={-180} max={180} step={5} value={shape.rotation ?? 0}
                   onChange={e => onShape({ rotation: +e.target.value })}
-                  style={{ width: '100%', accentColor: '#3b82f6', marginBottom: 12 }}
+                  style={{ width: '100%', accentColor: '#3b82f6', marginBottom: 12, cursor: 'pointer' }}
                 />
 
                 <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
