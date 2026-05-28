@@ -128,10 +128,13 @@ export default function KonvaStadium({ selectedIds, onSeatToggle, onSectionHover
   const activeSections = customSections ?? SECTIONS;
 
   // pan state
+  const [panning, setPanning] = useState(false);
   const isPanning = useRef(false);
   const panStart = useRef({ x: 0, y: 0, tx: 0, ty: 0 });
   const zoomRef = useRef(zoom);
-  zoomRef.current = zoom;
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
 
   // resize observer
   useEffect(() => {
@@ -210,6 +213,7 @@ export default function KonvaStadium({ selectedIds, onSeatToggle, onSectionHover
   const onMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
     isPanning.current = true;
+    setPanning(true);
     panStart.current = { x: e.clientX, y: e.clientY, tx: zoomRef.current.tx, ty: zoomRef.current.ty };
   }, []);
 
@@ -221,7 +225,10 @@ export default function KonvaStadium({ selectedIds, onSeatToggle, onSectionHover
     }
   }, []);
 
-  const onMouseUp = useCallback(() => { isPanning.current = false; }, []);
+  const onMouseUp = useCallback(() => {
+    isPanning.current = false;
+    setPanning(false);
+  }, []);
 
   // ── Section hover ──────────────────────────────────────────────────────────
   const onSecEnter = useCallback((e: React.MouseEvent, sec: Section) => {
@@ -268,7 +275,7 @@ export default function KonvaStadium({ selectedIds, onSeatToggle, onSectionHover
   const showSections = zoom.level <= 2;
 
   return (
-    <div style={{ width: '100%', height: '100%', position: 'relative', background: '#0d1321', cursor: isPanning.current ? 'grabbing' : 'grab' }}>
+    <div style={{ width: '100%', height: '100%', position: 'relative', background: '#0d1321', cursor: panning ? 'grabbing' : 'grab' }}>
       <svg
         ref={svgRef}
         width={size.w}

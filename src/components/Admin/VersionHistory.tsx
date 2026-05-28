@@ -9,19 +9,20 @@ interface LayoutVersion {
   createdAt: string;
 }
 
+const MOCK_VERSIONS: LayoutVersion[] = [
+  { id: '1', version: 3, name: 'MetLife v3 — Final', isActive: true, createdAt: new Date().toISOString() },
+  { id: '2', version: 2, name: 'MetLife v2 — Added upper deck', isActive: false, createdAt: new Date(Date.now() - 3600000).toISOString() },
+  { id: '3', version: 1, name: 'MetLife v1 — Initial', isActive: false, createdAt: new Date(Date.now() - 86400000).toISOString() },
+];
+
 export default function VersionHistory({ onClose }: { onClose: () => void }) {
-  const [versions, setVersions] = useState<LayoutVersion[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [versions, setVersions] = useState<LayoutVersion[]>(MOCK_VERSIONS);
+  const [loading, setLoading] = useState(false);
   const [rollingBack, setRollingBack] = useState<string | null>(null);
 
   useEffect(() => {
-    // Mock data for demo (real: fetch from /api/layout/:id/versions)
-    setVersions([
-      { id: '1', version: 3, name: 'MetLife v3 — Final', isActive: true, createdAt: new Date().toISOString() },
-      { id: '2', version: 2, name: 'MetLife v2 — Added upper deck', isActive: false, createdAt: new Date(Date.now() - 3600000).toISOString() },
-      { id: '3', version: 1, name: 'MetLife v1 — Initial', isActive: false, createdAt: new Date(Date.now() - 86400000).toISOString() },
-    ]);
-    setLoading(false);
+    // If we had a real API, we would fetch here.
+    // Since it's mock, we've initialized it in state.
   }, []);
 
   const handleRollback = async (layoutId: string, version: number) => {

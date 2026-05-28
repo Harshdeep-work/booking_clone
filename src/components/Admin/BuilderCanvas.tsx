@@ -119,6 +119,11 @@ export default function BuilderCanvas(props: Props) {
     const canvas = canvasRef.current; if (!canvas) return;
     const ctx = canvas.getContext('2d'); if (!ctx) return;
     const W = canvas.width, H = canvas.height;
+    
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#ffffff'; // Ensure clean white background
+    ctx.fillRect(0, 0, W, H);
+
     const cam = camRef.current;
     const { shapes, seats, texts, rows: layoutRows } = layoutRef.current;
     const sel = selRef.current;
@@ -133,11 +138,9 @@ export default function BuilderCanvas(props: Props) {
     const showEntrances = layers ? layers.find(l => l.id === 'entrances')?.visible !== false : true;
     const showOverlays = layers ? layers.find(l => l.id === 'overlays')?.visible !== false : true;
 
-    ctx.clearRect(0, 0, W, H);
+    // ── Smooth Dotted Grid ──────────────────────────────────────────────────
+    // Grid removed for performance and clarity as per user request
 
-    // ── White background (TickPick style) ─────────────────────────────────────
-    ctx.fillStyle = '#f0f2f5';
-    ctx.fillRect(0, 0, W, H);
 
     // ── Reference image ───────────────────────────────────────────────────────
     if (bgRef.current && showOverlays) {
@@ -884,8 +887,10 @@ export default function BuilderCanvas(props: Props) {
           const secShape = shapes.find(s => s.id === sectionId);
           // Skip if already drawn inside the arc-section block above
           if (secShape?.arcCenter) return;
+          
+          const dm = secShape ? (secShape.displayMode || 'both') : (orphanDMRef.current[sectionId] || 'both');
           // Skip if section is seats-only mode
-          if (secShape?.displayMode === 'seats') return;
+          if (dm === 'seats') return;
 
           const cat = secShape?.category as string || 'STANDARD';
           const rowCol = TIER_ROW[cat] || '#cbd5e1';
@@ -981,11 +986,12 @@ export default function BuilderCanvas(props: Props) {
       const secDisplayMode = new Map(shapes.map(s => [s.id, s.displayMode || 'both']));
       const shapeIds = new Set(shapes.map(s => s.id));
 
-      const LOD_ROWS_ONLY  = 0.6;
-      const LOD_SEATS_ONLY = 1.0;
+      const LOD_ROWS_ONLY  = 0.2; // Show dots much earlier
+      const LOD_SEATS_ONLY = 0.8;
 
       const showSeats = secMode
         || cam.zoom >= LOD_ROWS_ONLY
+        || sel.size > 0 // Always show dots if something is selected
         || seats.some(s => {
           const dm = shapeIds.has(s.sectionId)
             ? (secDisplayMode.get(s.sectionId) || 'both')
@@ -1019,8 +1025,12 @@ export default function BuilderCanvas(props: Props) {
             ? (orphanDMRef.current[s.sectionId] || 'both')
             : (secDisplayMode.get(s.sectionId) || 'both');
 
-          if (dm === 'rows' && !secMode) return;
-          if (dm === 'both' && !secMode && cam.zoom < LOD_ROWS_ONLY) return;
+          const isSel = sel.has(s.id);
+
+          if (!isSel) {
+            if (dm === 'rows' && !secMode) return;
+            if (dm === 'both' && !secMode && cam.zoom < LOD_ROWS_ONLY) return;
+          }
 
           const [px, py] = w2s(s.x, s.y, cam, W, H);
           if (px < -margin || px > W + margin || py < -margin || py > H + margin) return;
@@ -1028,7 +1038,6 @@ export default function BuilderCanvas(props: Props) {
           const worldSpacing = rowSpacingMap.get(s.rowId || s.sectionId) ?? 14;
           const r = Math.max(3, Math.min(10, worldSpacing * cam.zoom * 0.42));
 
-          const isSel = sel.has(s.id);
           const col = s.color || CAT_COLOR[s.category] || '#64748b';
           const isSold = s.status === 'sold' || s.status === 'locked';
           // In bar mode, render seats as white circles so they're visible against the bar
@@ -1057,20 +1066,37 @@ export default function BuilderCanvas(props: Props) {
 
     if (showLabels && texts) {
       texts.forEach(t => {
-      const [px, py] = w2s(t.x, t.y, cam, W, H);
-      const isSel = sel.has(t.id);
-      ctx.save();
-      ctx.font = `bold ${t.fontSize * cam.zoom}px ${FONT}`;
-      ctx.fillStyle = isSel ? '#2563eb' : t.color;
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(t.text, px, py);
-      if (isSel) {
+        const [px, py] = w2s(t.x, t.y, cam, W, H);
+        const isSel = sel.has(t.id);
+        ctx.save();
+        const styleStr = `${t.italic ? 'italic ' : ''}${t.bold ? 'bold ' : ''}`;
+        ctx.font = `${styleStr}${t.fontSize * cam.zoom}px ${t.fontFamily || FONT}`;
+        ctx.textAlign = t.align || 'center'; 
+        ctx.textBaseline = 'middle';
+        
         const m = ctx.measureText(t.text);
-        const tw = m.width + 12, th = t.fontSize * cam.zoom + 8;
-        ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 1.5;
-        ctx.setLineDash([4,3]); ctx.strokeRect(px-tw/2, py-th/2, tw, th); ctx.setLineDash([]);
-      }
-      ctx.restore();
+        const th = t.fontSize * cam.zoom + 8;
+        const tw = m.width + 12;
+        
+        let bx = px, by = py - th/2;
+        if (ctx.textAlign === 'center') bx = px - tw/2;
+        else if (ctx.textAlign === 'right') bx = px - tw;
+
+        if (t.background) {
+          ctx.fillStyle = t.background;
+          ctx.beginPath();
+          ctx.roundRect(bx, by, tw, th, 4 * cam.zoom);
+          ctx.fill();
+        }
+        
+        ctx.fillStyle = isSel ? '#2563eb' : t.color;
+        ctx.fillText(t.text, px, py);
+        
+        if (isSel) {
+          ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 1.5;
+          ctx.setLineDash([4,3]); ctx.strokeRect(bx, by, tw, th); ctx.setLineDash([]);
+        }
+        ctx.restore();
       });
     }
 

@@ -4,12 +4,12 @@ import { useCart } from '@/context/CartContext';
 import { useSocket } from '@/context/SocketContext';
 
 const CATEGORIES = [
-  { id: 'FIELD',    label: 'Field',    color: '#FF6B35' },
-  { id: 'PLATINUM', label: 'Platinum', color: '#A855F7' },
-  { id: 'GOLD',     label: 'Gold',     color: '#F59E0B' },
-  { id: 'SILVER',   label: 'Silver',   color: '#94A3B8' },
-  { id: 'BRONZE',   label: 'Bronze',   color: '#D97706' },
-  { id: 'GENERAL',  label: 'General',  color: '#3B82F6' },
+  { id: 'FIELD',    label: 'Field',    color: '#fb7185' },
+  { id: 'PLATINUM', label: 'Platinum', color: '#c084fc' },
+  { id: 'GOLD',     label: 'Gold',     color: '#fbbf24' },
+  { id: 'SILVER',   label: 'Silver',   color: '#94a3b8' },
+  { id: 'BRONZE',   label: 'Bronze',   color: '#d97706' },
+  { id: 'GENERAL',  label: 'General',  color: '#38bdf8' },
 ];
 
 interface BookingSidebarProps {

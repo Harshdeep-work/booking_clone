@@ -21,6 +21,10 @@ export interface CompactLayout {
     v: number[]; // flat vertices [x1,y1,x2,y2...]
     cx: number;
     cy: number;
+    vi?: boolean;
+    bp?: number;
+    dm?: string;
+    arc?: { c: [number, number], ir: number, or: number, a0: number, a1: number };
     r?: Array<{
       id: string;
       l: string; // row label (e.g. "A")
@@ -57,6 +61,11 @@ export interface CompactLayout {
     t: string; // text
     s: number; // fontSize
     c: string; // color
+    b?: boolean;
+    i?: boolean;
+    f?: string;
+    a?: 'left' | 'center' | 'right';
+    bg?: string;
   }>;
 }
 
@@ -141,6 +150,14 @@ export function packLayout(layout: LayoutState & { venueName?: string }): Compac
       v: shape.vertices.flat().map(v => Math.round(v * 10) / 10),
       cx: Math.round(shape.cx * 10) / 10,
       cy: Math.round(shape.cy * 10) / 10,
+      vi: shape.visible,
+      bp: shape.blockPrice,
+      dm: shape.displayMode,
+      arc: shape.arcCenter ? {
+        c: [Math.round(shape.arcCenter[0]*10)/10, Math.round(shape.arcCenter[1]*10)/10],
+        ir: shape.arcInnerR!, or: shape.arcOuterR!,
+        a0: shape.arcA0!, a1: shape.arcA1!
+      } : undefined,
       r: rows.length > 0 ? rows : undefined
     };
   });
@@ -172,7 +189,12 @@ export function packLayout(layout: LayoutState & { venueName?: string }): Compac
       y: Math.round(t.y * 10) / 10,
       t: t.text,
       s: t.fontSize,
-      c: t.color
+      c: t.color,
+      b: t.bold,
+      i: t.italic,
+      f: t.fontFamily,
+      a: t.align,
+      bg: t.background
     }))
   };
 }
@@ -192,7 +214,15 @@ export function unpackLayout(compact: CompactLayout): LayoutState {
     category: s.c as Category,
     color: compact.m.c[s.c]?.c || '#ccc',
     vertices: Array.from({ length: s.v.length / 2 }, (_, i) => [s.v[i*2], s.v[i*2+1]]),
-    cx: s.cx, cy: s.cy
+    cx: s.cx, cy: s.cy,
+    visible: s.vi,
+    blockPrice: s.bp,
+    displayMode: s.dm as 'rows' | 'seats' | 'both',
+    arcCenter: s.arc?.c,
+    arcInnerR: s.arc?.ir,
+    arcOuterR: s.arc?.or,
+    arcA0: s.arc?.a0,
+    arcA1: s.arc?.a1
   }));
 
   const seats: BSeat[] = [];
@@ -232,12 +262,17 @@ export function unpackLayout(compact: CompactLayout): LayoutState {
     expandRows(section.id, baseCategory, section.r);
   });
 
-  const texts: BText[] = compact.txt.map((t, i) => ({
-    id: `txt-${i}`,
+  const texts: BText[] = compact.txt.map((t, idx) => ({
+    id: `txt-${idx}`,
     x: t.x, y: t.y,
     text: t.t,
     fontSize: t.s,
-    color: t.c
+    color: t.c,
+    bold: t.b,
+    italic: t.i,
+    fontFamily: t.f,
+    align: t.a,
+    background: t.bg
   }));
 
   return { shapes, rows, seats, texts };

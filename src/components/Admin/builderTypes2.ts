@@ -37,6 +37,10 @@ export interface BShape {
   labelFontSize?: number;
   rotation?: number;
   scale?: number;
+  /** Whether this shape/block is visible in preview */
+  visible?: boolean;
+  /** Default seat price for this block */
+  blockPrice?: number;
 }
 
 export interface BRow {
@@ -79,6 +83,11 @@ export interface BText {
   text: string;
   fontSize: number;
   color: string;
+  bold?: boolean;
+  italic?: boolean;
+  fontFamily?: string;
+  align?: 'left' | 'center' | 'right';
+  background?: string;
 }
 
 export interface LayoutState {
@@ -143,10 +152,10 @@ export interface Snapshot {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 export const CAT_COLOR: Record<Category, string> = {
-  VIP:      '#a855f7',
-  PREMIUM:  '#f59e0b',
-  STANDARD: '#64748b',
-  BUDGET:   '#3b82f6',
+  VIP:      '#c084fc',
+  PREMIUM:  '#fbbf24',
+  STANDARD: '#94a3b8',
+  BUDGET:   '#38bdf8',
   GA:       '#10b981',
 };
 
@@ -374,7 +383,7 @@ export function buildNBAArena(): LayoutState {
   // LCA court: 94ft × 50ft → world units ~150 × 80
   const cW = 150, cH = 80;
   shapes.push({
-    id: 'court', type: 'court', label: 'COURT', category: 'GA', color: '#c8a96e',
+    id: 'court', type: 'court', label: 'COURT', category: 'GA', color: '#1e293b',
     vertices: [[-cW/2,-cH/2],[cW/2,-cH/2],[cW/2,cH/2],[-cW/2,cH/2]], cx: 0, cy: 0,
   });
 
@@ -502,12 +511,12 @@ export function buildNBAArena(): LayoutState {
 
   // ── Labels ────────────────────────────────────────────────────────────────
   texts.push(
-    { id: 'lbl-court',  x: 0, y: 0,    text: 'COURT',              fontSize: 10, color: '#7c5c2a' },
+    { id: 'lbl-court',  x: 0, y: 0,    text: 'COURT',              fontSize: 10, color: '#f8fafc' },
     { id: 'lbl-lower',  x: 0, y: -130, text: 'LOWER BOWL 101–126', fontSize: 8,  color: '#94a3b8' },
-    { id: 'lbl-mez',    x: 0, y: -157, text: 'MEZZANINE SUITES',   fontSize: 7,  color: '#d97706' },
+    { id: 'lbl-mez',    x: 0, y: -157, text: 'MEZZANINE SUITES',   fontSize: 7,  color: '#fbbf24' },
     { id: 'lbl-upper',  x: 0, y: -190, text: 'UPPER BOWL 201–232', fontSize: 8,  color: '#94a3b8' },
-    { id: 'lbl-vis',    x: -cW/2 - 30, y: 0, text: 'VISITORS',     fontSize: 8,  color: '#64748b' },
-    { id: 'lbl-home',   x:  cW/2 + 30, y: 0, text: 'PISTONS',      fontSize: 8,  color: '#1a3fa0' },
+    { id: 'lbl-vis',    x: -cW/2 - 30, y: 0, text: 'VISITORS',     fontSize: 8,  color: '#94a3b8' },
+    { id: 'lbl-home',   x:  cW/2 + 30, y: 0, text: 'HOME TEAM',    fontSize: 8,  color: '#38bdf8' },
   );
 
   return { shapes, rows: [], seats, texts };

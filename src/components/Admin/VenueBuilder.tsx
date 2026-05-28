@@ -49,6 +49,15 @@ export default function VenueBuilder() {
   const [fullscreen, setFullscreen]           = useState(false);
 
   const eng = useBuilderEngine();
+
+  // Show display-mode prompt after row/multirow is drawn
+  useEffect(() => {
+    if (eng.rowCommitTick > 0) {
+      setDisplayModePrompt(eng.lastRowSectionId ?? '');
+      setPromptStep('display');
+    }
+  }, [eng.rowCommitTick, eng.lastRowSectionId]);
+
   const isEmpty = eng.layout.shapes.length === 0 && eng.layout.seats.length === 0;
 
   // Track canvas container rect for context toolbar positioning
@@ -72,14 +81,6 @@ export default function VenueBuilder() {
     const rowIds = new Set(sectionSeats.map(s => s.rowId).filter(Boolean));
     return { seatCount: sectionSeats.length, rowCount: rowIds.size };
   }, [eng.selectedShape, eng.layout.seats]);
-
-  // Show display-mode prompt after row/multirow is drawn
-  useEffect(() => {
-    if (eng.rowCommitTick > 0) {
-      setDisplayModePrompt(eng.lastRowSectionId ?? '');
-      setPromptStep('display');
-    }
-  }, [eng.rowCommitTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fullscreen toggle (F key) + Escape to exit
   useEffect(() => {
@@ -194,113 +195,75 @@ export default function VenueBuilder() {
       {!fullscreen && <header className="tf-topbar">
 
         {/* Left */}
-        <div style={{ display:'flex', alignItems:'center', gap:10, minWidth:0 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:12, minWidth:0 }}>
           <Link href="/" className="tf-logo">
             <div className="tf-logo-mark">
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <path d="M2 7h10M7 2l5 5-5 5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              <svg width="18" height="18" viewBox="0 0 14 14" fill="none">
+                <path d="M2 7h10M7 2l5 5-5 5" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </div>
             <span className="tf-logo-text">TicketFlow</span>
           </Link>
           <div className="tf-divider-v" />
-          <div className="tf-venue-input">
-            <svg width="11" height="11" viewBox="0 0 11 11" fill="none" style={{color:'var(--text-3)'}}>
-              <path d="M5.5 1l1.2 2.5 2.8.4-2 2 .5 2.8L5.5 7.4 3 8.7l.5-2.8-2-2 2.8-.4L5.5 1z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/>
-            </svg>
-            <input
-              value={eng.venueName}
-              onChange={e => eng.setVenueName(e.target.value)}
-              placeholder="Venue name"
-            />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Venue Builder</span>
+             <span style={{ color: 'var(--border)', fontSize: 14 }}>/</span>
+             <div className="tf-venue-input">
+              <input
+                value={eng.venueName}
+                onChange={e => eng.setVenueName(e.target.value)}
+                placeholder="Untitled Venue"
+              />
+            </div>
           </div>
         </div>
 
         {/* Centre */}
-        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-          <button className="tf-icon-btn" onClick={eng.undo} title="Undo (Ctrl+Z)">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 5h6a4 4 0 010 8H4M2 5l3-3M2 5l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
-          <button className="tf-icon-btn" onClick={eng.redo} title="Redo (Ctrl+Y)">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M12 5H6a4 4 0 000 8h4M12 5l-3-3M12 5l-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
-          <div className="tf-divider-v" />
-          <div className="tf-stats">
-            <span style={{color:'var(--text-1)'}}>{eng.counts.sections}</span> sections
-            <span style={{color:'var(--text-1)'}}>{eng.counts.seats.toLocaleString()}</span> seats
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <div style={{ display: 'flex', background: 'var(--bg)', padding: 3, borderRadius: 10, border: '1px solid var(--border)' }}>
+            <button className={`tf-icon-btn`} style={{ border: 'none', width: 32, height: 32, background: 'transparent' }} onClick={eng.undo} title="Undo (Ctrl+Z)">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 5h6a4 4 0 010 8H4M2 5l3-3M2 5l3 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+            <button className={`tf-icon-btn`} style={{ border: 'none', width: 32, height: 32, background: 'transparent' }} onClick={eng.redo} title="Redo (Ctrl+Y)">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M12 5H6a4 4 0 000 8h4M12 5l-3-3M12 5l-3 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
           </div>
           <div className="tf-divider-v" />
-          <div className="tf-zoom-group">
-            <button className="tf-zoom-btn" onClick={eng.zoomOut} title="Zoom out">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
-            </button>
-            <span className="tf-zoom-pct">{eng.zoomPct}%</span>
-            <button className="tf-zoom-btn" onClick={eng.zoomIn} title="Zoom in">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 2v8M2 6h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
-            </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)' }} />
+              <span style={{ fontSize: 12, fontWeight: 700 }}>{eng.counts.sections} <span style={{ color: 'var(--text-3)', fontWeight: 500 }}>Sections</span></span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} />
+              <span style={{ fontSize: 12, fontWeight: 700 }}>{eng.counts.seats.toLocaleString()} <span style={{ color: 'var(--text-3)', fontWeight: 500 }}>Seats</span></span>
+            </div>
           </div>
         </div>
 
         {/* Right */}
-        <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-          <button className={`tf-chip-btn${showAdvancedTools?' active':''}`} onClick={() => setShowAdvancedTools(!showAdvancedTools)}>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1l1.2 2.5 2.8.4-2 2 .5 2.8L6 7.4 3.5 8.7l.5-2.8-2-2 2.8-.4L6 1z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
-            Advanced
-          </button>
-          <button className={`tf-chip-btn${showHistory?' active':''}`} onClick={() => setShowHistory(h => !h)}>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/><path d="M6 3.5V6l2 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-            History
-          </button>
-          <button className={`tf-chip-btn${showLayers?' active':''}`} onClick={() => setShowLayers(l => !l)}>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 4l5-3 5 3-5 3-5-3zM1 8l5 3 5-3M1 6l5 3 5-3" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
-            Layers
-          </button>
-          <button className={`tf-chip-btn${show3D?' active':''}`} onClick={() => setShow3D(v => !v)}>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1l5 3v4l-5 3-5-3V4l5-3z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
-            3D
-          </button>
-          <button className={`tf-chip-btn${viewMode==='perspective'?' active':''}`} onClick={() => setViewMode(v => v==='top'?'perspective':'top')}>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 9L6 3l5 6H1z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
-            {viewMode === 'top' ? 'Top' : 'Persp'}
-          </button>
-          <button className={`tf-chip-btn${eng.bgImage?' active':''}`} onClick={() => fileRef.current?.click()}>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1" y="2" width="10" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><circle cx="4" cy="5" r="1" stroke="currentColor" strokeWidth="1.1"/><path d="M1 8l3-2.5 2 2 2-2.5 3 3" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
-            {eng.bgImage ? 'Reference' : 'Reference'}
-          </button>
-          <input ref={fileRef} type="file" accept="image/*" style={{display:'none'}} onChange={handleBgUpload} />
-          {eng.bgImage && (
-            <div style={{display:'flex',alignItems:'center',gap:6,background:'var(--bg)',border:'1px solid var(--border)',borderRadius:'var(--radius-sm)',padding:'4px 10px'}}>
-              <span style={{fontSize:10,color:'var(--text-3)',fontWeight:600}}>Opacity</span>
-              <input type="range" min={0.05} max={1} step={0.05} value={eng.bgOpacity} onChange={e => eng.setBgOpacity(+e.target.value)} style={{width:64}} />
-              <button onClick={() => eng.setBgImage(null)} style={{fontSize:12,color:'var(--text-3)',background:'none',border:'none',cursor:'pointer',lineHeight:1,padding:0}}>
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-              </button>
+        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+          <div style={{ display: 'flex', background: 'var(--bg)', padding: 3, borderRadius: 100, border: '1px solid var(--border)', marginRight: 8 }}>
+            <button className={`tf-chip-btn ${!show3D ? 'active' : ''}`} style={{ border: 'none', padding: '6px 12px', height: 28, fontSize: 11 }} onClick={() => setShow3D(false)}>2D</button>
+            <button className={`tf-chip-btn ${show3D ? 'active' : ''}`} style={{ border: 'none', padding: '6px 12px', height: 28, fontSize: 11 }} onClick={() => setShow3D(true)}>3D View</button>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Link href="/booking" target="_blank" className="tf-chip-btn" style={{ textDecoration: 'none' }}>
+              <span style={{ marginRight: 4 }}>👁️</span> Preview
+            </Link>
+            <button className="tf-chip-btn" onClick={() => openAdvanced('tools')}>
+              <span style={{ marginRight: 4 }}>⚙️</span> Advanced
+            </button>
+            <div className="tf-divider-v" />
+            <div className="tf-status-badge snap" style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 100, border: 'none', background: '#ecfdf5', color: '#059669', fontSize: 10, fontWeight: 800 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', animation: 'tf-pulse 2s infinite' }} />
+              LIVE
             </div>
-          )}
-          <div className="tf-divider-v" />
-          <button className="tf-theme-btn" onClick={() => setDarkMode(d => !d)} title="Toggle dark mode">
-            {darkMode
-              ? <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="3" stroke="currentColor" strokeWidth="1.4"/><path d="M7 1v1M7 12v1M1 7h1M12 7h1M3 3l.7.7M10.3 10.3l.7.7M3 11l.7-.7M10.3 3.7l.7-.7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-              : <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11.5 8.5A5 5 0 015.5 2.5a5 5 0 100 9 5 5 0 006-3z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/></svg>
-            }
-          </button>
-          <Link href="/booking" className="tf-chip-btn" style={{textDecoration:'none'}}>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 6s2-4 5-4 5 4 5 4-2 4-5 4-5-4-5-4z" stroke="currentColor" strokeWidth="1.3"/><circle cx="6" cy="6" r="1.5" stroke="currentColor" strokeWidth="1.2"/></svg>
-            Preview
-          </Link>
-          <button className="tf-primary-btn" onClick={eng.exportLayout}>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v7M3 5l3 3 3-3M1 9v1a1 1 0 001 1h8a1 1 0 001-1V9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            Export
-          </button>
-          <button className="tf-chip-btn" onClick={handleSaveForPreview} title="Save design to localStorage for 2D/3D preview">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 6s2-4 5-4 5 4 5 4-2 4-5 4-5-4-5-4z" stroke="currentColor" strokeWidth="1.3"/><circle cx="6" cy="6" r="1.5" stroke="currentColor" strokeWidth="1.2"/></svg>
-            Save for Preview
-          </button>
-          <button className="tf-icon-btn" onClick={() => setFullscreen(v => !v)} title="Fullscreen (F)">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M1 5V2h3M10 2h3v3M13 9v3h-3M4 12H1V9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </button>
+            <button className="tf-primary-btn" onClick={handleSaveForPreview}>
+               Save for Preview
+            </button>
+          </div>
         </div>
       </header>}
 
@@ -308,15 +271,23 @@ export default function VenueBuilder() {
 
         {/* ── Left Sidebar ──────────────────────────────────────────────── */}
         {!leftCollapsed && !fullscreen && (
-          <LeftPanel
-            activeTool={eng.tool}
-            onTool={eng.changeTool}
-            snapOn={eng.snapOn}
-            onSnap={() => eng.setSnapOn(!eng.snapOn)}
-            onInsertPreset={handleInsertPreset}
-            onDialog={setDialog}
-            onOpenAdvanced={openAdvanced}
-          />
+          <div style={{ width: 'var(--sidebar-w)', display: 'flex', flexDirection: 'column', background: 'var(--panel)', borderRight: '1px solid var(--border)', backdropFilter: 'blur(20px)', zIndex: 10 }}>
+            <div style={{ padding: '24px 20px 16px' }}>
+              <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-1)', letterSpacing: '-0.5px', marginBottom: 4 }}>My Venue</h1>
+              <p style={{ fontSize: 13, color: 'var(--text-3)', fontWeight: 500 }}>Design your venue layout</p>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              <LeftPanel
+                activeTool={eng.tool}
+                onTool={eng.changeTool}
+                snapOn={eng.snapOn}
+                onSnap={() => eng.setSnapOn(!eng.snapOn)}
+                onInsertPreset={handleInsertPreset}
+                onDialog={setDialog}
+                onOpenAdvanced={openAdvanced}
+              />
+            </div>
+          </div>
         )}
 
         {/* ── Canvas ────────────────────────────────────────────────────── */}
@@ -348,116 +319,59 @@ export default function VenueBuilder() {
             {isEmpty && showEmpty && <EmptyState onDismiss={() => setShowEmpty(false)} />}
           </AnimatePresence>
 
-          {/* ── Section Context Toolbar ─────────────────────────────────── */}
-          <AnimatePresence>
-            {eng.selectedShape && eng.selectedIds.size === 1 && !eng.sectionMode && (
-              <SectionContextToolbar
-                key={eng.selectedShape.id}
-                shape={eng.selectedShape}
-                camera={eng.camera}
-                containerRect={containerRect}
-                onFillSection={eng.fillSection}
-                onAddRow={eng.addRow}
-                onSplitSection={eng.splitSection}
-                onDblClickSection={() => {
-                  const vs = eng.selectedShape!.vertices;
-                  const cx = vs.reduce((s, v) => s + v[0], 0) / vs.length;
-                  const cy = vs.reduce((s, v) => s + v[1], 0) / vs.length;
-                  eng.onDblClick(cx, cy);
-                }}
-                onDelete={eng.deleteSelected}
-                onSetDisplayMode={eng.setDisplayMode}
-                onAutoBalance={eng.autoBalance}
-                seatCount={sectionStats.seatCount}
-                rowCount={sectionStats.rowCount}
-              />
-            )}
-          </AnimatePresence>
-
-          {/* Left collapse toggle */}
-          {!fullscreen && <button
-            onClick={() => setLeftCollapsed(v => !v)}
-            title={leftCollapsed ? 'Show panel' : 'Hide panel'}
-            style={{
-              position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)',
-              width: 16, height: 40, border: 'none', borderRadius: '0 6px 6px 0',
-              background: 'var(--panel)', boxShadow: '2px 0 6px rgba(0,0,0,0.08)',
-              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'var(--text-3)', zIndex: 10, padding: 0,
-            }}
-          >
-            <svg width="8" height="12" viewBox="0 0 8 12" fill="none">
-              <path d={leftCollapsed ? 'M2 1l4 5-4 5' : 'M6 1L2 6l4 5'} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </button>}
-
-          {/* Right collapse toggle */}
-          {!fullscreen && <button
-            onClick={() => setRightCollapsed(v => !v)}
-            title={rightCollapsed ? 'Show panel' : 'Hide panel'}
-            style={{
-              position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)',
-              width: 16, height: 40, border: 'none', borderRadius: '6px 0 0 6px',
-              background: 'var(--panel)', boxShadow: '-2px 0 6px rgba(0,0,0,0.08)',
-              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'var(--text-3)', zIndex: 10, padding: 0,
-            }}
-          >
-            <svg width="8" height="12" viewBox="0 0 8 12" fill="none">
-              <path d={rightCollapsed ? 'M6 1L2 6l4 5' : 'M2 1l4 5-4 5'} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </button>}
-
-          {/* View mode toggle */}
+          {/* ── Floating Zoom Controls (TickPick style) ────────────────── */}
           <div style={{
-            position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)',
-            background: 'var(--panel)', borderRadius: 999,
-            boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
-            padding: '4px',
-            display: 'flex', flexDirection: 'column', gap: 2,
+            position: 'absolute', right: 24, top: 24,
+            display: 'flex', flexDirection: 'column', gap: 8,
+            zIndex: 30
           }}>
-            {(['seats', 'rows'] as const).map(mode => (
-              <button
-                key={mode}
-                title={mode === 'seats' ? 'Show seats on zoom' : 'Rows only'}
-                onClick={() => setSeatView(mode)}
-                style={{
-                  width: 36, height: 28, border: 'none', borderRadius: 999,
-                  background: seatView === mode ? 'var(--text-1)' : 'none',
-                  color: seatView === mode ? 'var(--panel)' : 'var(--text-3)',
-                  cursor: 'pointer', fontSize: 9, fontWeight: 700,
-                  letterSpacing: 0.3, transition: 'all 0.12s',
-                }}
-              >{mode === 'seats' ? 'Seats' : 'Rows'}</button>
-            ))}
+             <div style={{
+                background: 'var(--panel)', backdropFilter: 'blur(12px)',
+                borderRadius: 16, padding: 6, boxShadow: 'var(--shadow-lg)',
+                display: 'flex', flexDirection: 'column', border: '1px solid var(--border)'
+             }}>
+                <button className="tf-zoom-btn" onClick={eng.zoomIn} style={{ width: 40, height: 40, fontSize: 20 }}>+</button>
+                <div style={{ height: 1, background: 'var(--border)', margin: '4px 8px' }} />
+                <button className="tf-zoom-btn" onClick={eng.zoomOut} style={{ width: 40, height: 40, fontSize: 20 }}>−</button>
+             </div>
+             <button
+               onClick={handleZoomFit}
+               style={{
+                 width: 52, height: 52, borderRadius: 16, border: '1px solid var(--border)',
+                 background: 'var(--panel)', backdropFilter: 'blur(12px)', color: 'var(--text-1)',
+                 cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                 boxShadow: 'var(--shadow-lg)', transition: 'all 0.2s'
+               }}
+               onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
+               onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+             >
+               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 15v6h-6M3 9V3h6"/></svg>
+             </button>
           </div>
 
-          {/* Zoom controls */}
+          {/* ── Bottom Controls ─────────────────────────────────────────── */}
           <div style={{
-            position: 'absolute', right: 16, bottom: 56,
-            display: 'flex', flexDirection: 'column', alignItems: 'center',
-            background: 'var(--panel)', borderRadius: 999,
-            boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
-            padding: '6px 0',
+            position: 'absolute', left: '50%', transform: 'translateX(-50%)',
+            bottom: 24, display: 'flex', alignItems: 'center', gap: 12,
+            zIndex: 30
           }}>
-            {([
-              { label: '+', onClick: eng.zoomIn, title: 'Zoom in' },
-              { label: '−', onClick: eng.zoomOut, title: 'Zoom out' },
-              { label: '↺', onClick: eng.zoomReset, title: 'Reset zoom (1:1)' },
-              { label: '⊡', onClick: handleZoomFit, title: 'Zoom to fit (all content)' },
-            ] as const).map(({ label, onClick, title }) => (
-              <button key={label} title={title} onClick={onClick}
-                style={{
-                  width: 36, height: 36, border: 'none', background: 'none',
-                  cursor: 'pointer', fontSize: label === '↺' || label === '⊡' ? 17 : 22, lineHeight: 1,
-                  color: 'var(--text-1)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  borderRadius: '50%', transition: 'background 0.12s',
-                }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg)')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-              >{label}</button>
-            ))}
+             <div style={{
+                background: 'var(--panel)', backdropFilter: 'blur(12px)',
+                borderRadius: 100, padding: '6px 20px', boxShadow: 'var(--shadow-lg)',
+                display: 'flex', alignItems: 'center', gap: 12, border: '1px solid var(--border)'
+             }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)' }}>{eng.zoomPct}% Zoom</span>
+                <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
+                <button
+                  onClick={() => setShowLayers(!showLayers)}
+                  style={{ background: 'none', border: 'none', color: showLayers ? 'var(--accent)' : 'var(--text-2)', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                  Layers
+                </button>
+             </div>
           </div>
+
 
           {/* Spacing toolbar — shown when seats are selected */}
           {eng.selectedIds.size > 1 && [...eng.selectedIds].some(id => eng.layout.seats.find(s => s.id === id)) && (

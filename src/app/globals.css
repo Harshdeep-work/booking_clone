@@ -1,50 +1,50 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 :root {
-  /* Color palette */
-  --bg-primary:    #0A0E1A;
-  --bg-secondary:  #111827;
-  --bg-card:       rgba(20, 27, 45, 0.85);
-  --bg-hover:      rgba(255,255,255,0.05);
-  --border:        rgba(255,255,255,0.08);
-  --border-hover:  rgba(255,255,255,0.18);
+  /* Color palette - Modern Slate & Cyan */
+  --bg-primary:    #020617;
+  --bg-secondary:  #0f172a;
+  --bg-card:       rgba(30, 41, 59, 0.5);
+  --bg-hover:      rgba(255,255,255,0.03);
+  --border:        rgba(255,255,255,0.06);
+  --border-hover:  rgba(255,255,255,0.12);
 
-  --text-primary:   #F0F4FF;
-  --text-secondary: #8B9AB5;
-  --text-muted:     #4A5568;
+  --text-primary:   #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted:     #475569;
 
-  /* Category brand colors */
-  --field:    #FF6B35;
-  --platinum: #A855F7;
-  --gold:     #F59E0B;
-  --silver:   #94A3B8;
-  --bronze:   #D97706;
-  --general:  #3B82F6;
+  /* Category brand colors - Refined */
+  --field:    #fb7185;
+  --platinum: #c084fc;
+  --gold:     #fbbf24;
+  --silver:   #94a3b8;
+  --bronze:   #d97706;
+  --general:  #38bdf8;
 
   /* Status colors */
-  --available: #22D3EE;
-  --selected:  #10B981;
-  --locked:    #F97316;
-  --sold:      #4B5563;
+  --available: #0ea5e9;
+  --selected:  #10b981;
+  --locked:    #f59e0b;
+  --sold:      #334155;
 
   /* Glassmorphism */
-  --glass-bg:     rgba(10, 14, 26, 0.75);
-  --glass-border: rgba(255,255,255,0.07);
-  --glass-blur:   blur(20px);
+  --glass-bg:     rgba(2, 6, 23, 0.8);
+  --glass-border: rgba(255,255,255,0.05);
+  --glass-blur:   blur(24px);
 
   /* Accents */
-  --accent:       #3B82F6;
-  --accent-hover: #2563EB;
-  --accent-glow:  rgba(59,130,246,0.3);
-  --success:      #10B981;
-  --warning:      #F59E0B;
-  --danger:       #EF4444;
+  --accent:       #38bdf8;
+  --accent-hover: #0ea5e9;
+  --accent-glow:  rgba(56,189,248,0.25);
+  --success:      #10b981;
+  --warning:      #f59e0b;
+  --danger:       #ef4444;
 
-  /* Spacing & radius */
-  --radius-sm: 6px;
+  /* Spacing & radius - Softer */
+  --radius-sm: 8px;
   --radius-md: 12px;
-  --radius-lg: 20px;
-  --radius-xl: 28px;
+  --radius-lg: 24px;
+  --radius-xl: 32px;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }

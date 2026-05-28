@@ -1,33 +1,32 @@
 'use client';
 import { motion } from 'framer-motion';
 import type { ToolId, Category } from './builderTypes2';
-import { CAT_COLOR, arcPoly, centroid, ellipseArcPoly, buildNBAArena, type LayoutState, type BShape, type BText } from './builderTypes2';
-
+import { CAT_COLOR, centroid, ellipseArcPoly, buildNBAArena, type LayoutState, type BShape, type BText } from './builderTypes2';
 import { TOOL_GROUPS, icons } from './BuilderIcons';
 
 // ── Shape grid picker (Figma-style) ───────────────────────────────────────────
 const SHAPE_TOOLS: { id: ToolId; label: string; key: string; svg: React.ReactNode }[] = [
   { id: 'rect',     label: 'Rectangle', key: 'R',
-    svg: <svg viewBox="0 0 40 40" fill="none"><rect x="4" y="10" width="32" height="20" rx="2" stroke="currentColor" strokeWidth="2"/></svg> },
+    svg: <svg viewBox="0 0 40 40" fill="none"><rect x="4" y="10" width="32" height="20" rx="2" stroke="currentColor" strokeWidth="2.5"/></svg> },
   { id: 'circle',   label: 'Circle',    key: 'C',
-    svg: <svg viewBox="0 0 40 40" fill="none"><circle cx="20" cy="20" r="14" stroke="currentColor" strokeWidth="2"/></svg> },
+    svg: <svg viewBox="0 0 40 40" fill="none"><circle cx="20" cy="20" r="14" stroke="currentColor" strokeWidth="2.5"/></svg> },
   { id: 'ellipse',  label: 'Ellipse',   key: 'E',
-    svg: <svg viewBox="0 0 40 40" fill="none"><ellipse cx="20" cy="20" rx="17" ry="10" stroke="currentColor" strokeWidth="2"/></svg> },
+    svg: <svg viewBox="0 0 40 40" fill="none"><ellipse cx="20" cy="20" rx="17" ry="10" stroke="currentColor" strokeWidth="2.5"/></svg> },
   { id: 'triangle', label: 'Triangle',  key: '3',
-    svg: <svg viewBox="0 0 40 40" fill="none"><path d="M20 5l16 28H4L20 5z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/></svg> },
+    svg: <svg viewBox="0 0 40 40" fill="none"><path d="M20 5l16 28H4L20 5z" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round"/></svg> },
   { id: 'diamond',  label: 'Diamond',   key: 'D',
-    svg: <svg viewBox="0 0 40 40" fill="none"><path d="M20 4l16 16-16 16L4 20 20 4z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/></svg> },
+    svg: <svg viewBox="0 0 40 40" fill="none"><path d="M20 4l16 16-16 16L4 20 20 4z" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round"/></svg> },
   { id: 'pentagon', label: 'Pentagon',  key: '5',
-    svg: <svg viewBox="0 0 40 40" fill="none"><path d="M20 4l15 11-6 16H11L5 15 20 4z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/></svg> },
+    svg: <svg viewBox="0 0 40 40" fill="none"><path d="M20 4l15 11-6 16H11L5 15 20 4z" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round"/></svg> },
   { id: 'hexagon',  label: 'Hexagon',   key: '6',
-    svg: <svg viewBox="0 0 40 40" fill="none"><path d="M20 4l14 8v16l-14 8-14-8V12L20 4z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/></svg> },
+    svg: <svg viewBox="0 0 40 40" fill="none"><path d="M20 4l14 8v16l-14 8-14-8V12L20 4z" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round"/></svg> },
   { id: 'star',     label: 'Star',      key: '*',
-    svg: <svg viewBox="0 0 40 40" fill="none"><path d="M20 4l4 10 11 1-8 7 2 11-9-5-9 5 2-11-8-7 11-1 4-10z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/></svg> },
+    svg: <svg viewBox="0 0 40 40" fill="none"><path d="M20 4l4 10 11 1-8 7 2 11-9-5-9 5 2-11-8-7 11-1 4-10z" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round"/></svg> },
 ];
 
 function ShapeGrid({ activeTool, onTool }: { activeTool: ToolId; onTool: (t: ToolId) => void }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4, padding: '4px 0 8px' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, padding: '4px 0 12px' }}>
       {SHAPE_TOOLS.map(s => {
         const active = activeTool === s.id;
         return (
@@ -37,19 +36,18 @@ function ShapeGrid({ activeTool, onTool }: { activeTool: ToolId; onTool: (t: Too
             title={`${s.label} (${s.key})`}
             style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              gap: 3, padding: '8px 4px', borderRadius: 8, border: `1.5px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-              background: active ? 'var(--accent-soft)' : 'var(--panel)',
+              padding: '10px 4px', borderRadius: 12, border: `1.5px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+              background: active ? 'var(--accent-soft)' : '#fff',
               color: active ? 'var(--accent)' : 'var(--text-2)',
-              cursor: 'pointer', transition: 'all 0.12s', fontFamily: 'inherit',
-              boxShadow: active ? '0 0 0 3px rgba(201,123,54,0.1)' : 'none',
+              cursor: 'pointer', transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)', fontFamily: 'inherit',
+              boxShadow: active ? '0 4px 12px rgba(99, 102, 241, 0.15)' : 'var(--shadow-sm)',
             }}
-            onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--text-3)'; (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg)'; } }}
-            onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLButtonElement).style.background = 'var(--panel)'; } }}
+            onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--accent)'; (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-1px)'; } }}
+            onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(0)'; } }}
           >
-            <span style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {s.svg}
             </span>
-            <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: 0.2 }}>{s.label}</span>
           </button>
         );
       })}
@@ -75,7 +73,7 @@ const SHAPE_INSERTS: ShapeInsert[] = [
   { id: 'stage',      label: 'Stage',      icon: '🎤', bg: '#f1f5f9', border: '#cbd5e1', color: '#475569',
     build: () => { const v: [number,number][] = [[-80,-25],[80,-25],[80,25],[-80,25]]; return { shapes: [{ id: `stage-${uid()}`, type: 'stage', label: 'STAGE', category: 'GA', color: '#94a3b8', vertices: v, cx: 0, cy: 0 }] }; } },
   { id: 'ga',         label: 'GA Floor',   icon: '🎵', bg: '#f0fdf4', border: '#bbf7d0', color: '#059669',
-    build: () => { const v: [number,number][] = [[-60,-40],[60,-40],[60,40],[-60,40]]; return { shapes: [{ id: `ga-${uid()}`, type: 'ga', label: 'GA PIT', category: 'GA', color: CAT_COLOR.GA, vertices: v, cx: 0, cy: 0 }] }; } },
+    build: () => { const v: [number,number][] = [[-60,-40],[60,-40],[60,40],[-60,40]]; return { shapes: [{ id: `ga-${uid()}`, type: 'ga', label: 'GA PIT', category: 'GA', color: '#10b981', vertices: v, cx: 0, cy: 0 }] }; } },
   { id: 'suite',      label: 'Suite',      icon: '🏆', bg: '#fffbeb', border: '#fde68a', color: '#92400e',
     build: () => { const v: [number,number][] = [[-30,-12],[30,-12],[30,12],[-30,12]]; return { shapes: [{ id: `suite-${uid()}`, type: 'suite', label: 'SUITE', category: 'VIP', color: '#d97706', vertices: v, cx: 0, cy: 0 }] }; } },
 ];
@@ -83,11 +81,11 @@ const SHAPE_INSERTS: ShapeInsert[] = [
 const PRESETS: ShapePreset[] = [
   {
     id: 'nba-arena', label: 'NBA Arena', icon: '🏀',
-    description: 'Little Caesars Arena — courtside, 100s, 200s',
+    description: 'NBA Style Arena — courtside, 100s, 200s',
     build: () => buildNBAArena(),
   },
   {
-    id: 'oval-stadium', label: 'Soccer / Football', icon: '⚽',
+    id: 'oval-stadium', label: 'Oval Stadium', icon: '⚽',
     description: '4-ring oval stadium, 104 sections',
     build: () => {
       const shapes: BShape[] = [];
@@ -102,103 +100,12 @@ const PRESETS: ShapePreset[] = [
         for (let i = 0; i < ring.divs; i++) {
           const a0 = i * step - 90, a1 = (i + 1) * step - 90;
           const verts = ellipseArcPoly(0, 0, ring.innerRx, ring.innerRy, ring.outerRx, ring.outerRy, a0, a1, 14);
-          const [cx, cy] = centroid(verts);
+          const [cx, cy] = [verts.reduce((s, v) => s + v[0], 0) / verts.length, verts.reduce((s, v) => s + v[1], 0) / verts.length];
           const num = (ri + 1) * 100 + i + 1;
           shapes.push({ id: `oval-${num}`, type: 'section', label: `${num}`, category: ring.cat, color: CAT_COLOR[ring.cat], vertices: verts, cx, cy });
         }
       });
-      const texts: BText[] = [{ id: 'oval-lbl', x: 0, y: 0, text: 'PITCH', fontSize: 14, color: '#16a34a' }];
-      // Pitch
-      const pitchV: [number,number][] = [[-50,-32],[50,-32],[50,32],[-50,32]];
-      shapes.unshift({ id: 'pitch', type: 'court', label: 'PITCH', category: 'GA', color: '#16a34a', vertices: pitchV, cx: 0, cy: 0 });
-      // Stage / dugouts
-      [[-55,-5],[-55,5]].forEach(([x,y],i) => { const v: [number,number][] = [[x-8,y-4],[x+8,y-4],[x+8,y+4],[x-8,y+4]]; shapes.push({ id: `dug-${i}`, type: 'stage', label: 'DUG', category: 'GA', color: '#94a3b8', vertices: v, cx: x, cy: y }); });
-      // Tunnels
-      [[0,-175],[0,175],[-175,0],[175,0]].forEach(([x,y],i) => { const isH=i>=2; const v: [number,number][] = isH?[[x-8,y-16],[x+8,y-16],[x+8,y+16],[x-8,y+16]]:[[x-16,y-8],[x+16,y-8],[x+16,y+8],[x-16,y+8]]; shapes.push({ id: `tun-${i}`, type: 'tunnel', label: 'TUNNEL', category: 'GA', color: '#94a3b8', vertices: v, cx: x, cy: y }); });
-      // Press box
-      shapes.push({ id: 'press', type: 'pressbox', label: 'PRESS', category: 'GA', color: '#0284c7', vertices: [[-35,-178],[-35,-168],[35,-168],[35,-178]], cx: 0, cy: -173 });
-      // Scoreboards
-      [[0,-185],[0,185]].forEach(([x,y],i) => { const v: [number,number][] = [[x-15,y-8],[x+15,y-8],[x+15,y+8],[x-15,y+8]]; shapes.push({ id: `sc-${i}`, type: 'scoreboard', label: 'SCORE', category: 'GA', color: '#f59e0b', vertices: v, cx: x, cy: y }); });
-      // ADA
-      [[-90,-100],[90,-100],[-90,100],[90,100]].forEach(([x,y],i) => { const v: [number,number][] = [[x-12,y-7],[x+12,y-7],[x+12,y+7],[x-12,y+7]]; shapes.push({ id: `ada-${i}`, type: 'ada', label: 'ADA', category: 'GA', color: '#3b82f6', vertices: v, cx: x, cy: y }); });
-      return { shapes, texts };
-    },
-  },
-  {
-    id: 'theatre', label: 'Theatre / Concert', icon: '🎭',
-    description: 'Fan-shaped seating with stage',
-    build: () => {
-      const shapes: BShape[] = [];
-      const rings = [
-        { innerRx: 35, innerRy: 25, outerRx: 80, outerRy: 60, a0: -55, a1: 55, divs: 5, cat: 'VIP' as Category },
-        { innerRx: 83, innerRy: 63, outerRx: 130, outerRy: 100, a0: -65, a1: 65, divs: 7, cat: 'PREMIUM' as Category },
-        { innerRx: 133, innerRy: 103, outerRx: 178, outerRy: 140, a0: -75, a1: 75, divs: 9, cat: 'STANDARD' as Category },
-        { innerRx: 181, innerRy: 143, outerRx: 222, outerRy: 175, a0: -80, a1: 80, divs: 11, cat: 'BUDGET' as Category },
-      ];
-      rings.forEach((ring, ri) => {
-        const step = (ring.a1 - ring.a0) / ring.divs;
-        for (let i = 0; i < ring.divs; i++) {
-          const a0 = ring.a0 + i * step, a1 = ring.a0 + (i + 1) * step;
-          const verts = ellipseArcPoly(0, 0, ring.innerRx, ring.innerRy, ring.outerRx, ring.outerRy, a0, a1, 12);
-          const [cx, cy] = centroid(verts);
-          shapes.push({ id: `th-${ri}-${i}`, type: 'section', label: `${(ri+1)*100+i+1}`, category: ring.cat, color: CAT_COLOR[ring.cat], vertices: verts, cx, cy });
-        }
-      });
-      const sv: [number,number][] = [[-90,-28],[90,-28],[90,22],[-90,22]];
-      shapes.push({ id: 'stage', type: 'stage', label: 'STAGE', category: 'GA', color: '#94a3b8', vertices: sv, cx: 0, cy: -3 });
-      // Press box + scoreboards + tunnels + ADA
-      shapes.push({ id: 'press', type: 'pressbox', label: 'PRESS', category: 'GA', color: '#0284c7', vertices: [[-30,-228],[-30,-218],[30,-218],[30,-228]], cx: 0, cy: -223 });
-      [[0,-235],[0,235]].forEach(([x,y],i) => { const v: [number,number][] = [[x-14,y-8],[x+14,y-8],[x+14,y+8],[x-14,y+8]]; shapes.push({ id: `sc-${i}`, type: 'scoreboard', label: 'SCORE', category: 'GA', color: '#f59e0b', vertices: v, cx: x, cy: y }); });
-      [[0,-245],[0,245],[-245,0],[245,0]].forEach(([x,y],i) => { const isH=i>=2; const v: [number,number][] = isH?[[x-8,y-16],[x+8,y-16],[x+8,y+16],[x-8,y+16]]:[[x-16,y-8],[x+16,y-8],[x+16,y+8],[x-16,y+8]]; shapes.push({ id: `tun-${i}`, type: 'tunnel', label: 'TUNNEL', category: 'GA', color: '#94a3b8', vertices: v, cx: x, cy: y }); });
-      [[-80,-180],[80,-180],[-80,180],[80,180]].forEach(([x,y],i) => { const v: [number,number][] = [[x-12,y-7],[x+12,y-7],[x+12,y+7],[x-12,y+7]]; shapes.push({ id: `ada-${i}`, type: 'ada', label: 'ADA', category: 'GA', color: '#3b82f6', vertices: v, cx: x, cy: y }); });
       return { shapes };
-    },
-  },
-  {
-    id: 'hockey', label: 'Hockey / Ice Rink', icon: '🏒',
-    description: 'NHL arena with ice rink',
-    build: () => {
-      const shapes: BShape[] = [];
-      // Ice rink (rounded rectangle)
-      const rinkV: [number,number][] = [[-130,-55],[130,-55],[130,55],[-130,55]];
-      shapes.push({ id: 'rink', type: 'court', label: 'ICE', category: 'GA', color: '#bfdbfe', vertices: rinkV, cx: 0, cy: 0 });
-      // Lower bowl
-      const step = 360 / 26;
-      for (let i = 0; i < 26; i++) {
-        const a0 = i * step - 90, a1 = (i + 1) * step - 90;
-        const verts = ellipseArcPoly(0, 0, 95, 75, 145, 118, a0, a1, 14);
-        const [cx, cy] = centroid(verts);
-        shapes.push({ id: `hl-${101+i}`, type: 'section', label: `${101+i}`, category: 'PREMIUM', color: CAT_COLOR.PREMIUM, vertices: verts, cx, cy });
-      }
-      // Upper bowl
-      for (let i = 0; i < 26; i++) {
-        const a0 = i * step - 90, a1 = (i + 1) * step - 90;
-        const verts = ellipseArcPoly(0, 0, 148, 121, 188, 155, a0, a1, 14);
-        const [cx, cy] = centroid(verts);
-        shapes.push({ id: `hu-${201+i}`, type: 'section', label: `${201+i}`, category: 'BUDGET', color: CAT_COLOR.BUDGET, vertices: verts, cx, cy });
-      }
-      // Press box, scoreboards, tunnels, ADA
-      shapes.push({ id: 'press', type: 'pressbox', label: 'PRESS', category: 'GA', color: '#0284c7', vertices: [[-35,-158],[-35,-148],[35,-148],[35,-158]], cx: 0, cy: -153 });
-      [[0,-165],[0,165]].forEach(([x,y],i) => { const v: [number,number][] = [[x-14,y-8],[x+14,y-8],[x+14,y+8],[x-14,y+8]]; shapes.push({ id: `sc-${i}`, type: 'scoreboard', label: 'SCORE', category: 'GA', color: '#f59e0b', vertices: v, cx: x, cy: y }); });
-      [[0,-170],[0,170],[-170,0],[170,0]].forEach(([x,y],i) => { const isH=i>=2; const v: [number,number][] = isH?[[x-8,y-14],[x+8,y-14],[x+8,y+14],[x-8,y+14]]:[[x-14,y-8],[x+14,y-8],[x+14,y+8],[x-14,y+8]]; shapes.push({ id: `tun-${i}`, type: 'tunnel', label: 'TUNNEL', category: 'GA', color: '#94a3b8', vertices: v, cx: x, cy: y }); });
-      [[-80,-130],[80,-130],[-80,130],[80,130]].forEach(([x,y],i) => { const v: [number,number][] = [[x-12,y-7],[x+12,y-7],[x+12,y+7],[x-12,y+7]]; shapes.push({ id: `ada-${i}`, type: 'ada', label: 'ADA', category: 'GA', color: '#3b82f6', vertices: v, cx: x, cy: y }); });
-      return { shapes };
-    },
-  },
-  {
-    id: 'stage-shape', label: 'Stage Only', icon: '🎤',
-    description: 'Insert a stage shape',
-    build: () => {
-      const v: [number,number][] = [[-80,-25],[80,-25],[80,25],[-80,25]];
-      return { shapes: [{ id: `stage-${uid()}`, type: 'stage' as const, label: 'STAGE', category: 'GA' as Category, color: '#94a3b8', vertices: v, cx: 0, cy: 0 }] };
-    },
-  },
-  {
-    id: 'ga-pit', label: 'GA Floor Pit', icon: '🎵',
-    description: 'General admission floor area',
-    build: () => {
-      const v: [number,number][] = [[-60,-40],[60,-40],[60,40],[-60,40]];
-      return { shapes: [{ id: `ga-${uid()}`, type: 'ga' as const, label: 'GA PIT', category: 'GA' as Category, color: CAT_COLOR.GA, vertices: v, cx: 0, cy: 0 }] };
     },
   },
 ];
@@ -214,65 +121,70 @@ interface Props {
 }
 
 const SECTION_LABEL: React.CSSProperties = {
-  fontSize: 9, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase',
-  letterSpacing: 1, padding: '10px 12px 4px', display: 'block',
+  fontSize: 10, fontWeight: 800, color: 'var(--text-3)', textTransform: 'uppercase',
+  letterSpacing: 1, padding: '20px 4px 8px', display: 'block',
 };
 
 export default function LeftPanel({ activeTool, onTool, snapOn, onSnap, onInsertPreset, onDialog, onOpenAdvanced }: Props) {
   return (
-    <div style={{ width: 200, background: 'var(--panel)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', flexShrink: 0, overflowY: 'auto', overflowX: 'hidden', position: 'relative', zIndex: 10, height: '100%' }}>
+    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', padding: '0 16px 32px' }}>
 
       {/* ── Tools ── */}
-      <div style={{ padding: '0 8px 8px' }}>
+      <div>
         {TOOL_GROUPS.map((group, gi) => (
           <div key={gi}>
-            <span style={{ ...SECTION_LABEL, padding: gi === 0 ? '10px 4px 4px' : '8px 4px 4px' }}>{group.label}</span>
+            <span style={SECTION_LABEL}>{group.label}</span>
 
             {/* Shapes group → visual grid picker */}
             {group.label === 'Shapes' ? (
               <ShapeGrid activeTool={activeTool} onTool={onTool} />
             ) : (
-              group.tools.map(t => (
-                <button key={t.id} onClick={() => onTool(t.id)}
-                  style={{
-                    width: '100%', display: 'flex', alignItems: 'center', gap: 9,
-                    padding: '7px 10px', borderRadius: 8, border: 'none', marginBottom: 2,
-                    background: activeTool === t.id ? 'var(--accent-soft)' : 'transparent',
-                    color: activeTool === t.id ? 'var(--accent)' : 'var(--text-2)',
-                    cursor: 'pointer', fontSize: 12, fontWeight: activeTool === t.id ? 700 : 500,
-                    transition: 'all 0.1s', textAlign: 'left', fontFamily: 'inherit',
-                  }}
-                  onMouseEnter={e => { if (activeTool !== t.id) (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg)'; }}
-                  onMouseLeave={e => { if (activeTool !== t.id) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
-                >
-                  <span style={{ opacity: activeTool === t.id ? 1 : 0.6 }}>{icons[t.id]}</span>
-                  <span style={{ flex: 1 }}>{t.label}</span>
-                  <span style={{ fontSize: 9, fontWeight: 700, color: activeTool === t.id ? 'var(--accent)' : 'var(--text-3)', background: 'var(--bg)', padding: '1px 5px', borderRadius: 4 }}>{t.key}</span>
-                </button>
-              ))
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 4 }}>
+                {group.tools.map(t => (
+                  <button key={t.id} onClick={() => onTool(t.id)}
+                    style={{
+                      width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '8px 12px', borderRadius: 12, border: '1px solid transparent',
+                      background: activeTool === t.id ? 'var(--accent-soft)' : 'transparent',
+                      color: activeTool === t.id ? 'var(--accent)' : 'var(--text-2)',
+                      cursor: 'pointer', fontSize: 13, fontWeight: activeTool === t.id ? 700 : 500,
+                      transition: 'all 0.15s', textAlign: 'left', fontFamily: 'inherit',
+                    }}
+                    onMouseEnter={e => { if (activeTool !== t.id) { (e.currentTarget as HTMLButtonElement).style.background = '#fff'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLButtonElement).style.boxShadow = 'var(--shadow-sm)'; } }}
+                    onMouseLeave={e => { if (activeTool !== t.id) { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'transparent'; (e.currentTarget as HTMLButtonElement).style.boxShadow = 'none'; } }}
+                  >
+                    <span style={{ opacity: activeTool === t.id ? 1 : 0.6, width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icons[t.id]}</span>
+                    <span style={{ flex: 1 }}>{t.label}</span>
+                    <span style={{ fontSize: 9, fontWeight: 800, color: activeTool === t.id ? 'var(--accent)' : 'var(--text-3)', background: 'var(--bg)', padding: '2px 6px', borderRadius: 6 }}>{t.key}</span>
+                  </button>
+                ))}
+              </div>
             )}
           </div>
         ))}
 
         {/* Snap */}
         <button onClick={onSnap}
-          style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '7px 10px', borderRadius: 8, border: 'none', marginTop: 4, background: snapOn ? 'var(--accent-soft)' : 'transparent', color: snapOn ? 'var(--accent)' : 'var(--text-3)', cursor: 'pointer', fontSize: 12, fontWeight: snapOn ? 700 : 500, transition: 'all 0.1s', textAlign: 'left', fontFamily: 'inherit' }}>
-          {icons.snap}
+          style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 12, border: '1px solid transparent', marginTop: 12, background: snapOn ? 'var(--accent-soft)' : 'transparent', color: snapOn ? 'var(--accent)' : 'var(--text-3)', cursor: 'pointer', fontSize: 13, fontWeight: snapOn ? 700 : 500, transition: 'all 0.15s', textAlign: 'left', fontFamily: 'inherit' }}
+          onMouseEnter={e => { if (!snapOn) { (e.currentTarget as HTMLButtonElement).style.background = '#fff'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLButtonElement).style.boxShadow = 'var(--shadow-sm)'; } }}
+          onMouseLeave={e => { if (!snapOn) { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'transparent'; (e.currentTarget as HTMLButtonElement).style.boxShadow = 'none'; } }}
+        >
+          <span style={{ width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icons.snap}</span>
           <span style={{ flex: 1 }}>Snap to Grid</span>
-          <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: 'var(--bg)', color: snapOn ? 'var(--accent)' : 'var(--text-3)' }}>{snapOn ? 'ON' : 'OFF'}</span>
+          <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 6, background: 'var(--bg)', color: snapOn ? 'var(--accent)' : 'var(--text-3)' }}>{snapOn ? 'ON' : 'OFF'}</span>
         </button>
       </div>
 
       {/* ── Generate ── */}
-      <div style={{ borderTop: '1px solid var(--border-soft)' }}>
+      <div style={{ marginTop: 12 }}>
         <span style={SECTION_LABEL}>Generate</span>
-        <div style={{ padding: '0 8px 8px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 4 }}>
           <button onClick={() => onOpenAdvanced('tools')}
-            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '7px 10px', borderRadius: 8, border: 'none', marginBottom: 2, background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 12, fontWeight: 500, transition: 'all 0.1s', textAlign: 'left', fontFamily: 'inherit' }}
-            onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg)'}
-            onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = 'transparent'}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 12, border: '1px solid transparent', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 13, fontWeight: 500, transition: 'all 0.15s', textAlign: 'left', fontFamily: 'inherit' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#fff'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLButtonElement).style.boxShadow = 'var(--shadow-sm)'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'transparent'; (e.currentTarget as HTMLButtonElement).style.boxShadow = 'none'; }}
           >
-            <span style={{ opacity: 0.6 }}>{icons.row}</span>
+            <span style={{ opacity: 0.6, width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icons.row}</span>
             Rows & Seats
           </button>
           {([
@@ -281,11 +193,11 @@ export default function LeftPanel({ activeTool, onTool, snapOn, onSnap, onInsert
             { icon: 'fill' as const, label: 'Seat Block',    d: 'block' as const },
           ]).map(g => (
             <button key={g.d} onClick={() => onDialog(g.d)}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '7px 10px', borderRadius: 8, border: 'none', marginBottom: 2, background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 12, fontWeight: 500, transition: 'all 0.1s', textAlign: 'left', fontFamily: 'inherit' }}
-              onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg)'}
-              onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = 'transparent'}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 12, border: '1px solid transparent', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 13, fontWeight: 500, transition: 'all 0.15s', textAlign: 'left', fontFamily: 'inherit' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#fff'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLButtonElement).style.boxShadow = 'var(--shadow-sm)'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'transparent'; (e.currentTarget as HTMLButtonElement).style.boxShadow = 'none'; }}
             >
-              <span style={{ opacity: 0.6 }}>{icons[g.icon]}</span>
+              <span style={{ opacity: 0.6, width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icons[g.icon]}</span>
               {g.label}
             </button>
           ))}
@@ -293,46 +205,44 @@ export default function LeftPanel({ activeTool, onTool, snapOn, onSnap, onInsert
       </div>
 
       {/* ── Quick Inserts ── */}
-      <div style={{ borderTop: '1px solid var(--border-soft)' }}>
+      <div style={{ marginTop: 12 }}>
         <span style={SECTION_LABEL}>Quick Inserts</span>
-        <div style={{ padding: '0 8px 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {SHAPE_INSERTS.map(s => (
             <button key={s.id} onClick={() => onInsertPreset(s.build())}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border-soft)', background: 'var(--panel)', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}
-              onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--accent)'}
-              onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border-soft)'}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 16, border: '1px solid var(--border)', background: '#fff', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', boxShadow: 'var(--shadow-sm)', transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--accent)'; (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLButtonElement).style.boxShadow = 'var(--shadow-md)'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(0)'; (e.currentTarget as HTMLButtonElement).style.boxShadow = 'var(--shadow-sm)'; }}
             >
-              <span style={{ width: 22, height: 22, borderRadius: 6, background: s.bg, border: `1px solid ${s.border}`, color: s.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>
+              <span style={{ width: 32, height: 32, borderRadius: 10, background: s.bg, border: `1px solid ${s.border}`, color: s.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
                 {s.icon}
               </span>
-              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-1)' }}>{s.label}</span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-1)' }}>{s.label}</span>
             </button>
           ))}
         </div>
       </div>
 
       {/* ── Shape Library ── */}
-      <div style={{ borderTop: '1px solid var(--border-soft)', flex: 1 }}>
+      <div style={{ marginTop: 12, flex: 1 }}>
         <span style={SECTION_LABEL}>Venue Templates</span>
-        <div style={{ padding: '0 8px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {PRESETS.map(p => (
             <motion.button
               key={p.id}
-              whileHover={{ scale: 1.01 }}
+              whileHover={{ y: -2 }}
               whileTap={{ scale: 0.98 }}
               onClick={() => onInsertPreset(p.build())}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 9, border: '1px solid var(--border-soft)', background: 'var(--panel)', cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.12s', fontFamily: 'inherit' }}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 16, border: '1px solid var(--border)', background: '#fff', cursor: 'pointer', textAlign: 'left', transition: 'all 0.2s', fontFamily: 'inherit', boxShadow: 'var(--shadow-sm)' }}
               onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--accent)'}
-              onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border-soft)'}
+              onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'}
             >
-              <div style={{ width: 28, height: 28, borderRadius: 7, background: 'var(--bg)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{color:'var(--text-2)'}}>
-                  <path d="M7 1l1.5 3 3.5.5-2.5 2.5.5 3.5L7 9 4 10.5l.5-3.5L2 4.5 5.5 4 7 1z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
-                </svg>
+              <div style={{ width: 36, height: 36, borderRadius: 12, background: 'var(--bg)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <span style={{ fontSize: 18 }}>{p.icon}</span>
               </div>
               <div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-1)' }}>{p.label}</div>
-                <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 1 }}>{p.description}</div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-1)' }}>{p.label}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600, marginTop: 1 }}>{p.description}</div>
               </div>
             </motion.button>
           ))}

@@ -204,7 +204,7 @@ export function useBuilderEngine() {
       if (Math.abs(dist - row.curveRadius) > thresh) continue;
       // Check angle is within arc sweep
       let angle = Math.atan2(wy - cy, wx - cx) * 180 / Math.PI;
-      let a0 = row.curveA0, a1 = row.curveA1;
+      const a0 = row.curveA0, a1 = row.curveA1;
       if (a1 > a0) {
         if (angle < a0) angle += 360;
         if (angle >= a0 && angle <= a1) return row.id;
@@ -382,13 +382,17 @@ export function useBuilderEngine() {
         isDragging.current = true;
         dragOffsets.current.clear();
         layoutRef.current.seats.forEach(s => {
-          if (next.has(s.id)) dragOffsets.current.set(s.id, [swx - s.x, swy - s.y]);
+          if (next.has(s.id) || (s.rowId && next.has(s.rowId))) dragOffsets.current.set(s.id, [swx - s.x, swy - s.y]);
         });
         layoutRef.current.shapes.forEach(sh => {
           if (next.has(sh.id)) dragOffsets.current.set(sh.id, [swx - sh.cx, swy - sh.cy]);
         });
         layoutRef.current.texts.forEach(t => {
           if (next.has(t.id)) dragOffsets.current.set(t.id, [swx - t.x, swy - t.y]);
+        });
+        // also store offset for the curve center if a row is selected
+        layoutRef.current.rows.forEach(r => {
+          if (next.has(r.id) && r.curveCenter) dragOffsets.current.set(r.id, [swx - r.curveCenter[0], swy - r.curveCenter[1]]);
         });
       } else if (!e.shiftKey) {
         syncSel(new Set());
@@ -543,9 +547,14 @@ export function useBuilderEngine() {
     if (isDragging.current && selRef.current.size > 0) {
       const next = { ...layoutRef.current };
       next.seats = next.seats.map(s => {
-        if (!selRef.current.has(s.id)) return s;
+        if (!selRef.current.has(s.id) && !(s.rowId && selRef.current.has(s.rowId))) return s;
         const off = dragOffsets.current.get(s.id) || [0, 0];
         return { ...s, x: swx - off[0], y: swy - off[1] };
+      });
+      next.rows = next.rows.map(r => {
+        if (!selRef.current.has(r.id) || !r.curveCenter) return r;
+        const off = dragOffsets.current.get(r.id) || [0, 0];
+        return { ...r, curveCenter: [swx - off[0], swy - off[1]] };
       });
       next.shapes = next.shapes.map(sh => {
         if (!selRef.current.has(sh.id)) return sh;
@@ -585,17 +594,35 @@ export function useBuilderEngine() {
       const [x0, y0] = rectStart.current;
       const rx0 = Math.min(x0, swx), rx1 = Math.max(x0, swx);
       const ry0 = Math.min(y0, swy), ry1 = Math.max(y0, swy);
-      const inside = layoutRef.current.seats
-        .filter(s => s.x >= rx0 && s.x <= rx1 && s.y >= ry0 && s.y <= ry1)
-        .map(s => s.id);
-      if (inside.length > 0) {
-        const next = e.shiftKey
-          ? new Set([...selRef.current, ...inside])
-          : new Set(inside);
-        syncSel(next);
-      } else if (!e.shiftKey) {
-        syncSel(new Set());
+      const isClick = (rx1 - rx0 < 5) && (ry1 - ry0 < 5);
+
+      let nextSel = selRef.current;
+
+      if (isClick) {
+        const hitId = hitTest(wx, wy);
+        const rowHitId = !hitId ? hitTestRow(wx, wy) : null;
+        const finalHitId = hitId || rowHitId;
+        if (finalHitId) {
+          nextSel = e.shiftKey ? new Set(Array.from(selRef.current).concat(finalHitId)) : new Set([finalHitId]);
+        } else if (!e.shiftKey) {
+          nextSel = new Set();
+        }
+      } else {
+        const insideSeats = layoutRef.current.seats
+          .filter(s => s.x >= rx0 && s.x <= rx1 && s.y >= ry0 && s.y <= ry1)
+          .map(s => s.id);
+        const insideRows = layoutRef.current.rows
+          .filter(r => r.curveCenter && r.curveCenter[0] >= rx0 && r.curveCenter[0] <= rx1 && r.curveCenter[1] >= ry0 && r.curveCenter[1] <= ry1)
+          .map(r => r.id);
+        const inside = [...insideSeats, ...insideRows];
+        if (inside.length > 0) {
+          nextSel = e.shiftKey ? new Set([...selRef.current, ...inside]) : new Set(inside);
+        } else if (!e.shiftKey) {
+          nextSel = new Set();
+        }
       }
+      
+      syncSel(nextSel);
       rectStart.current = null;
       setPreview(p => ({ ...p, rectStart: null }));
       return;
@@ -889,17 +916,52 @@ export function useBuilderEngine() {
   const selectedText  = layout.texts.find(t => selectedIds.has(t.id) && selectedIds.size === 1) || null;
 
   // Derive selected row: when a single seat is selected, expose its row group
+  // OR when a row and its seats are selected
   const selectedRow = (() => {
-    if (!selectedSeat || !selectedSeat.rowId) return null;
-    const rowSeats = layout.seats.filter(s => s.rowId === selectedSeat.rowId);
+    if (selectedIds.size === 0) return null;
+    
+    let targetRowId: string | null = null;
+
+    if (selectedIds.size === 1) {
+      const id = Array.from(selectedIds)[0];
+      const seat = layout.seats.find(s => s.id === id);
+      if (seat && seat.rowId) targetRowId = seat.rowId;
+      else if (layout.rows.some(r => r.id === id)) targetRowId = id;
+    } else {
+      // Multiple items selected. Check if they ALL belong to the same row
+      const arr = Array.from(selectedIds);
+      const firstId = arr[0];
+      let candRowId = layout.rows.find(r => r.id === firstId)?.id;
+      if (!candRowId) {
+        const seat = layout.seats.find(s => s.id === firstId);
+        if (seat?.rowId) candRowId = seat.rowId;
+      }
+      
+      if (candRowId) {
+        // Verify ALL selected items are either this row or seats in this row
+        const allBelong = arr.every(id => {
+          if (id === candRowId) return true;
+          const seat = layout.seats.find(s => s.id === id);
+          return seat && seat.rowId === candRowId;
+        });
+        if (allBelong) targetRowId = candRowId;
+      }
+    }
+
+    if (!targetRowId) return null;
+
+    const rowSeats = layout.seats.filter(s => s.rowId === targetRowId);
     if (rowSeats.length === 0) return null;
+    const directRow = layout.rows.find(r => r.id === targetRowId);
+
     return {
-      id: selectedSeat.rowId,
-      sectionId: selectedSeat.sectionId,
-      label: selectedSeat.label.replace(/\d+$/, ''), // row letter
-      category: selectedSeat.category,
+      id: targetRowId,
+      sectionId: rowSeats[0].sectionId,
+      label: directRow?.label || rowSeats[0].label.replace(/\d+$/, ''),
+      category: directRow?.category || rowSeats[0].category,
       seatCount: rowSeats.length,
       seats: rowSeats,
+      curveRadius: directRow?.curveRadius,
     };
   })();
 
@@ -1262,7 +1324,7 @@ export function useBuilderEngine() {
     const currentShape = layoutRef.current.shapes.find(s => s.id === id);
     if (!currentShape) return;
 
-    let next = { ...layoutRef.current };
+    const next = { ...layoutRef.current };
 
     if (u.scale !== undefined && u.scale !== (currentShape.scale ?? 1)) {
       const oldScale = currentShape.scale ?? 1;
@@ -1327,6 +1389,9 @@ export function useBuilderEngine() {
         };
       });
     } else {
+      if (u.blockPrice !== undefined) {
+        next.seats = next.seats.map(s => s.sectionId === id ? { ...s, price: u.blockPrice! } : s);
+      }
       next.shapes = next.shapes.map(s => s.id === id ? { ...s, ...u } : s);
     }
 

@@ -7,8 +7,8 @@ const PREVIEW_PATH = process.env.PREVIEW_LAYOUT_PATH || '/tmp/ticketflow_preview
 async function readPreviewFile() {
   try {
     return await fs.readFile(PREVIEW_PATH, 'utf8');
-  } catch (err: any) {
-    if (err?.code === 'ENOENT') return null;
+  } catch (err: unknown) {
+    if (err instanceof Error && (err as any).code === 'ENOENT') return null;
     throw err;
   }
 }

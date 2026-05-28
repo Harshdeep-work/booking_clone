@@ -46,18 +46,42 @@ function RightPanel({
     byRow.get(row)!.push(s);
   });
 
-  let rows = Array.from(byRow.entries());
+  const rows = Array.from(byRow.entries());
   if (sortMode === 'deal')       rows.sort(([, a], [, b]) => Math.min(...a.map(s => s.price)) - Math.min(...b.map(s => s.price)));
   if (sortMode === 'price_asc')  rows.sort(([, a], [, b]) => Math.min(...a.map(s => s.price)) - Math.min(...b.map(s => s.price)));
   if (sortMode === 'price_desc') rows.sort(([, a], [, b]) => Math.min(...b.map(s => s.price)) - Math.min(...a.map(s => s.price)));
   if (sortMode === 'section')    rows.sort(([a], [b]) => a.localeCompare(b));
 
   // All sections listing (when no section is focused)
-  const allSections = layout ? layout.shapes.map(sh => {
-    const seats = layout.seats.filter(s => s.sectionId === sh.id && (!s.status || s.status === 'available'));
-    const min = seats.length ? Math.min(...seats.map(s => s.price || 0).filter(p => p > 0)) : null;
-    return { shape: sh, available: seats.length, minPrice: min };
-  }).sort((a, b) => (a.minPrice ?? 9999) - (b.minPrice ?? 9999)) : [];
+  const allSections = layout ? (() => {
+    const sections = layout.shapes.map(sh => {
+      const seats = layout.seats.filter(s => s.sectionId === sh.id && (!s.status || s.status === 'available'));
+      const min = seats.length ? Math.min(...seats.map(s => s.price || 0).filter(p => p > 0)) : null;
+      return { shape: sh, available: seats.length, minPrice: min };
+    });
+
+    // Add orphan sections (seats without shapes)
+    const shapeIds = new Set(layout.shapes.map(s => s.id));
+    const orphans = new Set(layout.seats.map(s => s.sectionId).filter(id => !shapeIds.has(id)));
+    orphans.forEach(id => {
+      const seats = layout.seats.filter(s => s.sectionId === id && (!s.status || s.status === 'available'));
+      if (seats.length > 0) {
+        const min = Math.min(...seats.map(s => s.price || 0).filter(p => p > 0));
+        // Create a dummy shape for the listing
+        const dummyShape: BShape = {
+          id,
+          label: id.startsWith('block-') ? 'Block' : 'Unassigned',
+          type: 'section',
+          category: seats[0].category,
+          color: (CAT_COLOR as any)[seats[0].category] || '#94a3b8',
+          vertices: [], cx: 0, cy: 0
+        };
+        sections.push({ shape: dummyShape, available: seats.length, minPrice: min === Infinity ? null : min });
+      }
+    });
+
+    return sections.sort((a, b) => (a.minPrice ?? 9999) - (b.minPrice ?? 9999));
+  })() : [];
 
   return (
     <div style={{
@@ -125,7 +149,7 @@ function RightPanel({
                   <div style={{ fontSize: 56, marginBottom: 20 }}>🏟️</div>
                   <div style={{ fontSize: 20, fontWeight: 900, color: '#111827', marginBottom: 10 }}>No venue saved yet</div>
                   <div style={{ fontSize: 14, color: '#6b7280', lineHeight: 1.7, marginBottom: 24 }}>
-                    Go to the <strong>Builder</strong>, design your venue, then click <strong>"Save for Preview"</strong>
+                    Go to the <strong>Builder</strong>, design your venue, then click <strong>&quot;Save for Preview&quot;</strong>
                   </div>
                   <a href="/admin" style={{
                     display: 'inline-flex', alignItems: 'center', gap: 8,
@@ -402,16 +426,21 @@ export default function StadiumBooking() {
   }, []);
 
   const onSeatToggle = useCallback((bseat: BSeat) => {
-    setSelectedSeats(prev =>
-      prev.some(s => s.id === bseat.id)
-        ? prev.filter(s => s.id !== bseat.id)
-        : [...prev, { ...bseat, _selected: true as const }]
-    );
+    setSelectedSeats(prev => {
+      const isSelected = prev.some(s => s.id === bseat.id);
+      if (isSelected) {
+        return prev.filter(s => s.id !== bseat.id);
+      }
+      if (prev.length >= qty) {
+        return prev;
+      }
+      return [...prev, { ...bseat, _selected: true as const }];
+    });
     if (layout) {
       const shape = layout.shapes.find(s => s.id === bseat.sectionId);
       if (shape) setFocusedShape(shape);
     }
-  }, [layout]);
+  }, [layout, qty]);
 
   const onRemove = useCallback((id: string) => {
     setSelectedSeats(prev => prev.filter(s => s.id !== id));

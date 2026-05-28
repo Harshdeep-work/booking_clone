@@ -25,6 +25,7 @@ export default function PreviewStadium({ selectedIds, onSeatToggle, onShapeClick
   const [hovSeat, setHovSeat]   = useState<string | null>(null);
   const [hovShape, setHovShape] = useState<string | null>(null);
   const [focusedShape, setFocusedShape] = useState<string | null>(null);
+  const [panning, setPanning] = useState(false);
   const isPanning = useRef(false);
   const panStart  = useRef({ mx: 0, my: 0, cx: 0, cy: 0 });
   const layoutRef = useRef<LayoutState | null>(null);
@@ -120,6 +121,7 @@ export default function PreviewStadium({ selectedIds, onSeatToggle, onShapeClick
   const onMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
     isPanning.current = true;
+    setPanning(true);
     setCam(c => { panStart.current = { mx: e.clientX, my: e.clientY, cx: c.x, cy: c.y }; return c; });
   }, []);
   const onMouseMove = useCallback((e: React.MouseEvent) => {
@@ -127,7 +129,10 @@ export default function PreviewStadium({ selectedIds, onSeatToggle, onShapeClick
     const dx = e.clientX - panStart.current.mx, dy = e.clientY - panStart.current.my;
     setCam(c => ({ ...c, x: panStart.current.cx - dx / c.zoom, y: panStart.current.cy - dy / c.zoom }));
   }, []);
-  const onMouseUp = useCallback(() => { isPanning.current = false; }, []);
+  const onMouseUp = useCallback(() => {
+    isPanning.current = false;
+    setPanning(false);
+  }, []);
 
   if (!layout || size.w === 0) {
     return (
@@ -135,7 +140,7 @@ export default function PreviewStadium({ selectedIds, onSeatToggle, onShapeClick
         <div style={{ color: '#6b7280', fontSize: 13, fontFamily: 'Inter,sans-serif', textAlign: 'center' }}>
           <div style={{ fontSize: 32, marginBottom: 12 }}>🏟️</div>
           <div style={{ fontWeight: 700, color: '#4b5563', marginBottom: 6 }}>No venue saved yet</div>
-          <div style={{ fontSize: 11, color: '#9ca3af' }}>Go to Admin → design your venue → click "Save for Preview"</div>
+          <div style={{ fontSize: 11, color: '#9ca3af' }}>Go to Admin → design your venue → click &quot;Save for Preview&quot;</div>
         </div>
       </div>
     );
@@ -161,7 +166,7 @@ export default function PreviewStadium({ selectedIds, onSeatToggle, onShapeClick
       <svg
         ref={svgRef}
         width={size.w} height={size.h}
-        style={{ display: 'block', userSelect: 'none', cursor: isPanning.current ? 'grabbing' : 'grab' }}
+        style={{ display: 'block', userSelect: 'none', cursor: panning ? 'grabbing' : 'grab' }}
         onWheel={onWheel}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
@@ -189,7 +194,7 @@ export default function PreviewStadium({ selectedIds, onSeatToggle, onShapeClick
         </defs>
 
         {/* ── Sections ── */}
-        {layout.shapes.map(sh => {
+        {layout.shapes.filter(sh => sh.visible !== false).map(sh => {
           const col = sh.color || (CAT_COLOR as any)[sh.category] || '#3b82f6';
           const isHov = hovShape === sh.id;
           const isFocused = focusedShape === sh.id;
@@ -251,7 +256,10 @@ export default function PreviewStadium({ selectedIds, onSeatToggle, onShapeClick
         })}
 
         {/* ── Seats ── */}
-        {showSeats && layout.seats.map(seat => {
+        {showSeats && layout.seats.filter(s => {
+          const shape = shapeMap.get(s.sectionId);
+          return !shape || shape.visible !== false;
+        }).map(seat => {
           const sp = w2s(seat.x, seat.y, cam, size.w, size.h);
           if (sp.x < -20 || sp.x > size.w + 20 || sp.y < -20 || sp.y > size.h + 20) return null;
           const isSelected = selectedIds.has(seat.id);
@@ -286,6 +294,8 @@ export default function PreviewStadium({ selectedIds, onSeatToggle, onShapeClick
 
         {/* ── Row labels ── */}
         {showRowLabels && Array.from(rowFirstSeat.entries()).map(([key, seat]) => {
+          const shape = shapeMap.get(seat.sectionId);
+          if (shape && shape.visible === false) return null;
           const p = w2s(seat.x - 14 / cam.zoom, seat.y, cam, size.w, size.h);
           return (
             <text key={key} x={p.x} y={p.y}

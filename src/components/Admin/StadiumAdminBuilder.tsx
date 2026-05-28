@@ -63,6 +63,7 @@ export default function StadiumAdminBuilder() {
   const [showArc, setShowArc]    = useState(false);
   const [snap, setSnap]          = useState(true);
   const [cursorPos, setCursorPos]= useState<[number,number] | null>(null);
+  const [drawPtsCount, setDrawPtsCount] = useState(0);
   const [ringCfg, setRingCfg]    = useState<RingConfig>({ innerR: 100, outerR: 150, divisions: 8, category: 'GENERAL', basePrice: 100 });
   const [arcCfg, setArcCfg]      = useState<ArcConfig>({ innerR: 100, outerR: 150, aStart: -30, aEnd: 30, category: 'GENERAL', basePrice: 100 });
 
@@ -90,6 +91,7 @@ export default function StadiumAdminBuilder() {
     previewDots.current.forEach(d => scene.remove(d));
     previewDots.current = [];
     drawPts.current = [];
+    setDrawPtsCount(0);
   }, []);
 
   const updatePreview = useCallback((pts: [number,number][], mouse?: [number,number]) => {
@@ -371,6 +373,7 @@ export default function StadiumAdminBuilder() {
     if (toolRef.current === 'draw') {
       if (e.detail === 2) { commitDraw(); return; }
       drawPts.current.push([wx, wy]);
+      setDrawPtsCount(drawPts.current.length);
       // add dot
       const dot = new THREE.Mesh(new THREE.CircleGeometry(3, 10), new THREE.MeshBasicMaterial({ color: 0x4f6ef7 }));
       dot.position.set(wx, wy, 2);
@@ -582,7 +585,7 @@ export default function StadiumAdminBuilder() {
           pointerEvents: 'none', whiteSpace: 'nowrap', boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
         }}>
           {tool === 'select' && 'Click to select  ·  Drag to move  ·  Del to delete'}
-          {tool === 'draw'   && `${drawPts.current.length} pts  ·  Click to add vertex  ·  Double-click to close  ·  Esc to cancel`}
+          {tool === 'draw'   && `${drawPtsCount} pts  ·  Click to add vertex  ·  Double-click to close  ·  Esc to cancel`}
           {tool === 'vertex' && 'Click a polygon to edit  ·  Drag handles to reshape'}
           {tool === 'seat'   && 'Click anywhere to place a seat'}
           {tool === 'pan'    && 'Click and drag to pan  ·  Scroll to zoom'}

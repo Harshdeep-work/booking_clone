@@ -514,10 +514,15 @@ export default function RowManagerPanel({
   const [addSeats, setAddSeats] = useState(20);
   const [addPrice, setAddPrice] = useState(100);
   const [addCat, setAddCat] = useState<string>('STANDARD');
-  const [filterSection, setFilterSection] = useState<string>(selectedSectionId || '__all__');
-  useEffect(() => {
-    if (selectedSectionId) setFilterSection(selectedSectionId);
-  }, [selectedSectionId]);
+  
+  const [filterSection, setFilterSection] = useState<string>('__all__');
+  const [prevSelectedId, setPrevSelectedId] = useState<string | null>(null);
+
+  if (selectedSectionId !== prevSelectedId) {
+    setPrevSelectedId(selectedSectionId);
+    setFilterSection(selectedSectionId || '__all__');
+  }
+
   const [customCats, setCustomCats] = useState<CustomCategory[]>(DEFAULT_CATS);
   const [showManageCats, setShowManageCats] = useState(false);
   // Curved rows state
@@ -968,7 +973,7 @@ export default function RowManagerPanel({
             <div style={{ fontSize: 28, marginBottom: 10 }}>💺</div>
             <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>No rows yet</div>
             <div style={{ fontSize: 11 }}>
-              Click <strong>"+ Add Row"</strong> below to start building your seating layout.
+              Click <strong>&quot;+ Add Row&quot;</strong> below to start building your seating layout.
             </div>
           </div>
         ) : (

@@ -41,21 +41,21 @@ export interface StadiumSeat {
 }
 
 export const CAT_COLOR: Record<Category, string> = {
-  FIELD:    '#FF6B35',
-  PLATINUM: '#A855F7',
-  GOLD:     '#F59E0B',
-  SILVER:   '#94A3B8',
-  BRONZE:   '#D97706',
-  GENERAL:  '#3B82F6',
+  FIELD:    '#fb7185',
+  PLATINUM: '#c084fc',
+  GOLD:     '#fbbf24',
+  SILVER:   '#94a3b8',
+  BRONZE:   '#d97706',
+  GENERAL:  '#38bdf8',
 };
 
 export const CAT_HEX: Record<Category, number> = {
-  FIELD:    0xFF6B35,
-  PLATINUM: 0xA855F7,
-  GOLD:     0xF59E0B,
-  SILVER:   0x94A3B8,
-  BRONZE:   0xD97706,
-  GENERAL:  0x3B82F6,
+  FIELD:    0xfb7185,
+  PLATINUM: 0xc084fc,
+  GOLD:     0xfbbf24,
+  SILVER:   0x94a3b8,
+  BRONZE:   0xd97706,
+  GENERAL:  0x38bdf8,
 };
 
 const ROWS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';

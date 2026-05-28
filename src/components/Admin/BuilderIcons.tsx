@@ -63,7 +63,6 @@ export const TOOL_GROUPS: { label: string; tools: { id: ToolId; label: string; k
       { id: 'row',      label: 'Standard Row',      key: 'W' },
       { id: 'multirow', label: 'Multiple Rows',     key: 'M' },
       { id: 'arcrow',   label: 'Curved Arc Row',    key: 'A' },
-      { id: 'block',    label: 'Seat Block',        key: 'B' },
     ],
   },
   {

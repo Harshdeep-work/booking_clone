@@ -36,59 +36,59 @@ interface SocketContextValue {
 const SocketContext = createContext<SocketContextValue | null>(null);
 
 export function SocketProvider({ userId, children }: { userId: string; children: React.ReactNode }) {
-  const socketRef = useRef<Socket | null>(null);
+  const [socket, setSocket] = useState<Socket | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>('connecting');
   const missedHeartbeats = useRef(0);
 
   useEffect(() => {
     const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001';
-    const socket = io(socketUrl, {
+    const s = io(socketUrl, {
       auth: { userId },
       reconnectionAttempts: 10,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
     });
-    socketRef.current = socket;
+    setSocket(s);
 
-    socket.on('connect', () => { setStatus('connected'); missedHeartbeats.current = 0; });
-    socket.on('disconnect', () => setStatus('disconnected'));
-    socket.on('connect_error', () => setStatus('disconnected'));
+    s.on('connect', () => { setStatus('connected'); missedHeartbeats.current = 0; });
+    s.on('disconnect', () => setStatus('disconnected'));
+    s.on('connect_error', () => setStatus('disconnected'));
 
     // Heartbeat monitoring (Fix 8)
-    socket.on('heartbeat', () => { missedHeartbeats.current = 0; });
+    s.on('heartbeat', () => { missedHeartbeats.current = 0; });
     const heartbeatCheck = setInterval(() => {
       missedHeartbeats.current++;
       if (missedHeartbeats.current >= 2) {
         console.warn('[WS] Missed 2 heartbeats — reconnecting');
-        socket.disconnect();
-        socket.connect();
+        s.disconnect();
+        s.connect();
         missedHeartbeats.current = 0;
       }
     }, 35000);
 
     return () => {
       clearInterval(heartbeatCheck);
-      socket.disconnect();
+      s.disconnect();
     };
   }, [userId]);
 
   const joinSection = useCallback((sectionId: string) => {
-    socketRef.current?.emit('join_section', sectionId);
-  }, []);
+    socket?.emit('join_section', sectionId);
+  }, [socket]);
 
   const leaveSection = useCallback((sectionId: string) => {
-    socketRef.current?.emit('leave_section', sectionId);
-  }, []);
+    socket?.emit('leave_section', sectionId);
+  }, [socket]);
 
   const makeListener = useCallback(<T,>(event: string) => {
     return (cb: (e: T) => void) => {
-      socketRef.current?.on(event, cb);
-      return () => { socketRef.current?.off(event, cb); };
+      socket?.on(event, cb);
+      return () => { socket?.off(event, cb); };
     };
-  }, []);
+  }, [socket]);
 
-  const value: SocketContextValue = {
-    socket: socketRef.current,
+  const value: SocketContextValue = React.useMemo(() => ({
+    socket,
     status,
     joinSection,
     leaveSection,
@@ -97,7 +97,7 @@ export function SocketProvider({ userId, children }: { userId: string; children:
     onSeatSold: makeListener<{ seat_id: string }>('seat_sold'),
     onSectionUpdate: makeListener<SectionUpdateEvent>('section_update'),
     onBulkSeatUpdate: makeListener<BulkSeatUpdateEvent>('bulk_seat_update'),
-  };
+  }), [socket, status, joinSection, leaveSection, makeListener]);
 
   return (
     <SocketContext.Provider value={value}>
